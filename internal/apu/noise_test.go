@@ -186,8 +186,9 @@ func TestNoiseChannel_GetSample(t *testing.T) {
 	sample := n.GetSample()
 
 	// LFSR starts at 0x7FFF (bit 0 = 1), inverted = 0
-	if sample != 0.0 {
-		t.Errorf("Initial sample: got %f, want 0.0", sample)
+	// Bipolar: 0 * 2.0 - 1.0 = -1.0
+	if sample != -1.0 {
+		t.Errorf("Initial sample: got %f, want -1.0", sample)
 	}
 
 	// Clock LFSR until we get bit 0 = 0 (inverted = 1)

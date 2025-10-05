@@ -58,10 +58,10 @@ func TestWaveChannel_OutputLevel(t *testing.T) {
 		outputLevel uint8
 		expected    float32
 	}{
-		{"Mute (0%)", 0, 0.0},  // Sample 0xF >> inf = 0
-		{"100%", 1, 1.0},       // Sample 0xF (no shift) = 15/15
-		{"50%", 2, 7.0 / 15.0}, // Sample 0xF >> 1 = 7
-		{"25%", 3, 3.0 / 15.0}, // Sample 0xF >> 2 = 3
+		{"Mute (0%)", 0, -1.0},      // Sample 0xF >> inf = 0, bipolar: 0/7.5 - 1.0 = -1.0
+		{"100%", 1, 1.0},            // Sample 0xF (no shift) = 15, bipolar: 15/7.5 - 1.0 = 1.0
+		{"50%", 2, -0.066667},       // Sample 0xF >> 1 = 7, bipolar: 7/7.5 - 1.0 = -0.066667
+		{"25%", 3, -0.6},            // Sample 0xF >> 2 = 3, bipolar: 3/7.5 - 1.0 = -0.6
 	}
 
 	for _, tt := range tests {
@@ -164,16 +164,18 @@ func TestWaveChannel_SampleProgression(t *testing.T) {
 	w.WriteNR34(0x80) // Trigger
 
 	// First sample should be from high nibble of first byte (0x0)
+	// Bipolar: 0/7.5 - 1.0 = -1.0
 	sample1 := w.GetSample()
-	if sample1 != 0.0 {
-		t.Errorf("First sample: got %f, want 0.0", sample1)
+	if sample1 != -1.0 {
+		t.Errorf("First sample: got %f, want -1.0", sample1)
 	}
 
 	// Advance wave position
 	w.wavePos = 1
 	// Second sample should be from low nibble of first byte (0x1)
+	// Bipolar: 1/7.5 - 1.0 = -0.866667
 	sample2 := w.GetSample()
-	expected := float32(1) / 15.0
+	expected := float32(1)/7.5 - 1.0
 	if abs(sample2-expected) > 0.01 {
 		t.Errorf("Second sample: got %f, want %f", sample2, expected)
 	}
