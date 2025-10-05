@@ -1,4 +1,4 @@
-No/mcp# Game Boy Emulator Overview
+# Game Boy Emulator Overview
 
 ## Game Boy (DMG) Specifications
 

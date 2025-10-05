@@ -40,6 +40,7 @@ func (c *CPU) Step() uint8 {
 	// Handle halt state
 	if c.halted {
 		// TODO: Check for interrupts (Phase 4)
+		// TODO: Implement HALT bug (when IME=0 and IE & IF != 0, PC doesn't increment after HALT)
 		// For now, just consume 1 M-cycle
 		return 4
 	}
@@ -78,6 +79,7 @@ func (c *CPU) fetchWord() uint16 {
 }
 
 // push pushes a 16-bit value onto the stack.
+// Note: SP is decremented first (pre-decrement), then values are written.
 func (c *CPU) push(value uint16) {
 	c.Registers.SP -= 2
 	c.Memory.Write(c.Registers.SP, uint8(value))      //nolint:gosec // G115: Intentional byte extraction from 16-bit value
@@ -85,6 +87,8 @@ func (c *CPU) push(value uint16) {
 }
 
 // pop pops a 16-bit value from the stack.
+// Note: Values are read first, then SP is incremented (post-increment).
+// This asymmetry with push() is intentional and matches Game Boy hardware behavior.
 func (c *CPU) pop() uint16 {
 	low := uint16(c.Memory.Read(c.Registers.SP))
 	high := uint16(c.Memory.Read(c.Registers.SP + 1))

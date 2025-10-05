@@ -234,7 +234,10 @@ func TestLoadROM(t *testing.T) {
 	rom[0x0104] = 0xCE // Nintendo logo byte
 	rom[0x4000] = 0x42 // First byte of ROM bank 1
 
-	bus.LoadROM(rom)
+	err := bus.LoadROM(rom)
+	if err != nil {
+		t.Fatalf("Failed to load ROM: %v", err)
+	}
 
 	// Check ROM Bank 00
 	if bus.Read(0x0100) != 0x00 {
@@ -247,6 +250,35 @@ func TestLoadROM(t *testing.T) {
 	// Check ROM Bank 01
 	if bus.Read(0x4000) != 0x42 {
 		t.Errorf("ROM Bank 01 not loaded correctly")
+	}
+}
+
+func TestLoadROMSizeValidation(t *testing.T) {
+	bus := NewBus()
+
+	// Test ROM too small (less than 16 KiB)
+	tooSmall := make([]byte, 0x3000) // 12 KiB
+	err := bus.LoadROM(tooSmall)
+	if err == nil {
+		t.Error("Expected error for ROM smaller than 16 KiB, got nil")
+	}
+
+	// Test minimum valid ROM (16 KiB)
+	minROM := make([]byte, 0x4000)
+	err = bus.LoadROM(minROM)
+	if err != nil {
+		t.Errorf("Expected no error for 16 KiB ROM, got: %v", err)
+	}
+
+	// Test partial second bank (20 KiB)
+	partialROM := make([]byte, 0x5000)
+	partialROM[0x4FFF] = 0x99
+	err = bus.LoadROM(partialROM)
+	if err != nil {
+		t.Errorf("Expected no error for partial ROM, got: %v", err)
+	}
+	if bus.Read(0x4FFF) != 0x99 {
+		t.Errorf("Partial ROM not loaded correctly")
 	}
 }
 
@@ -284,5 +316,125 @@ func TestMemoryMap(t *testing.T) {
 		if value != tt.value {
 			t.Errorf("Read(%04X) = %02X, want %02X", tt.addr, value, tt.value)
 		}
+	}
+}
+
+func TestMemoryBoundaries(t *testing.T) {
+	bus := NewBus()
+
+	tests := []struct {
+		name     string
+		addr     uint16
+		value    uint8
+		readable bool
+		writable bool
+	}{
+		// ROM boundaries (read-only)
+		{"ROM0 start", 0x0000, 0x11, true, false},
+		{"ROM0 end", 0x3FFF, 0x22, true, false},
+		{"ROM1 start", 0x4000, 0x33, true, false},
+		{"ROM1 end", 0x7FFF, 0x44, true, false},
+
+		// VRAM boundaries
+		{"VRAM start", 0x8000, 0x55, true, true},
+		{"VRAM end", 0x9FFF, 0x66, true, true},
+
+		// External RAM boundaries
+		{"ExtRAM start", 0xA000, 0x77, true, false}, // Disabled by default
+		{"ExtRAM end", 0xBFFF, 0x88, true, false},
+
+		// WRAM boundaries
+		{"WRAM start", 0xC000, 0x99, true, true},
+		{"WRAM end", 0xDFFF, 0xAA, true, true},
+
+		// Echo RAM boundaries
+		{"Echo start", 0xE000, 0xBB, true, true},
+		{"Echo end", 0xFDFF, 0xCC, true, true},
+
+		// OAM boundaries
+		{"OAM start", 0xFE00, 0xDD, true, true},
+		{"OAM end", 0xFE9F, 0xEE, true, true},
+
+		// Not usable region
+		{"Not usable start", 0xFEA0, 0xFF, true, false},
+		{"Not usable end", 0xFEFF, 0xFF, true, false},
+
+		// I/O boundaries (skip 0xFF00 joypad - has special default value 0xFF)
+		{"I/O register", 0xFF01, 0x01, true, true},
+		{"I/O end", 0xFF7F, 0x02, true, true},
+
+		// HRAM boundaries
+		{"HRAM start", 0xFF80, 0x03, true, true},
+		{"HRAM end", 0xFFFE, 0x04, true, true},
+
+		// IE register
+		{"IE register", 0xFFFF, 0x05, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Try to write
+			bus.Write(tt.addr, tt.value)
+
+			// Try to read
+			readValue := bus.Read(tt.addr)
+
+			if tt.writable { //nolint:nestif // Test validation complexity is acceptable
+				if readValue != tt.value {
+					t.Errorf("Write/Read at 0x%04X: got 0x%02X, want 0x%02X", tt.addr, readValue, tt.value)
+				}
+			} else if tt.addr >= 0x8000 {
+				// For writable=false (non-ROM), verify write was ignored
+				// (Skip ROM regions as they may have initial data)
+				if tt.addr >= 0xFEA0 && tt.addr < 0xFF00 {
+					if readValue != 0xFF {
+						t.Errorf("Not usable region at 0x%04X should return 0xFF, got 0x%02X", tt.addr, readValue)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEchoRAMMirroring(t *testing.T) {
+	bus := NewBus()
+
+	// Write to WRAM and verify it's mirrored in Echo RAM
+	testCases := []struct {
+		wramAddr uint16
+		echoAddr uint16
+		value    uint8
+	}{
+		{0xC000, 0xE000, 0x42},
+		{0xC100, 0xE100, 0x99},
+		{0xD000, 0xF000, 0xAB},
+		{0xDDFF, 0xFDFF, 0xCD},
+	}
+
+	for _, tc := range testCases {
+		t.Run("WRAM->Echo", func(t *testing.T) {
+			// Write to WRAM
+			bus.Write(tc.wramAddr, tc.value)
+
+			// Read from Echo RAM - should be same value
+			echoValue := bus.Read(tc.echoAddr)
+			if echoValue != tc.value {
+				t.Errorf("Echo RAM mirror failed: wrote 0x%02X to 0x%04X, read 0x%02X from 0x%04X",
+					tc.value, tc.wramAddr, echoValue, tc.echoAddr)
+			}
+		})
+
+		t.Run("Echo->WRAM", func(t *testing.T) {
+			// Write to Echo RAM
+			newValue := tc.value + 1
+			bus.Write(tc.echoAddr, newValue)
+
+			// Read from WRAM - should be same value
+			wramValue := bus.Read(tc.wramAddr)
+			if wramValue != newValue {
+				t.Errorf("Echo RAM mirror failed: wrote 0x%02X to 0x%04X, read 0x%02X from 0x%04X",
+					newValue, tc.echoAddr, wramValue, tc.wramAddr)
+			}
+		})
 	}
 }

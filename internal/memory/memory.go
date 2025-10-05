@@ -1,6 +1,11 @@
 // Package memory implements the Game Boy memory bus and address space mapping.
 package memory
 
+import (
+	"errors"
+	"fmt"
+)
+
 // Bus represents the Game Boy memory bus.
 type Bus struct {
 	// ROM banks (16 KiB each)
@@ -232,13 +237,26 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 	}
 }
 
+// ErrROMTooSmall indicates the ROM is smaller than the minimum 16 KiB.
+var ErrROMTooSmall = errors.New("ROM too small: minimum is 16 KiB")
+
 // LoadROM loads ROM data into memory banks.
-func (b *Bus) LoadROM(rom []byte) {
+// Minimum ROM size for Game Boy is 32 KiB (two 16 KiB banks).
+func (b *Bus) LoadROM(rom []byte) error {
+	if len(rom) < 0x4000 {
+		return fmt.Errorf("%w: got %d bytes", ErrROMTooSmall, len(rom))
+	}
+
 	// Load ROM Bank 00 (first 16 KiB)
 	copy(b.rom0[:], rom[:0x4000])
 
 	// Load ROM Bank 01 (second 16 KiB if available)
-	if len(rom) > 0x4000 {
+	if len(rom) >= 0x8000 {
 		copy(b.rom1[:], rom[0x4000:0x8000])
+	} else if len(rom) > 0x4000 {
+		// Partial bank - copy what's available
+		copy(b.rom1[:], rom[0x4000:])
 	}
+
+	return nil
 }

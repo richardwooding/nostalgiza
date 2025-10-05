@@ -21,6 +21,13 @@ func newMockMemory() *mockMemory {
 	return &mockMemory{}
 }
 
+// setupCPU creates a CPU and mock memory for testing.
+func setupCPU() (*CPU, *mockMemory) {
+	mem := newMockMemory()
+	cpu := New(mem)
+	return cpu, mem
+}
+
 func TestRegisters(t *testing.T) {
 	r := NewRegisters()
 
@@ -459,5 +466,258 @@ func TestHALT(t *testing.T) {
 	cycles := cpu.Step()
 	if cycles != 4 {
 		t.Errorf("Halted CPU cycles = %d, want 4", cycles)
+	}
+}
+
+func TestDAA(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	tests := []struct {
+		name     string
+		a        uint8
+		flags    uint8 // Initial flags
+		expected uint8
+		expectZ  bool
+		expectH  bool // H should be cleared
+		expectC  bool
+		expectN  bool // Should preserve N flag
+	}{
+		// After addition (N=0)
+		{"ADD: 0x09 + 0x08 = 0x11, no adjust", 0x11, 0x00, 0x11, false, false, false, false},
+		{"ADD: 0x09 + 0x09 = 0x12 (H set), adjust +6", 0x12, FlagH, 0x18, false, false, false, false},
+		{"ADD: Lower nibble >9, adjust +6", 0x1A, 0x00, 0x20, false, false, false, false},
+		{"ADD: Upper nibble >9, adjust +60", 0xA3, 0x00, 0x03, false, false, true, false},
+		{"ADD: 0x99 + 0x99 = 0x32 (C set), adjust +60", 0x32, FlagC, 0x92, false, false, true, false},
+		{"ADD: 0x99 + 0x99 = 0x32 (C+H set), adjust +66", 0x32, FlagC | FlagH, 0x98, false, false, true, false},
+		{"ADD: result 0x00 after adjust", 0x9A, FlagC, 0x00, true, false, true, false},
+
+		// After subtraction (N=1)
+		{"SUB: 0x46 - 0x08 = 0x3E, no adjust", 0x3E, FlagN, 0x3E, false, false, false, true},
+		{"SUB: 0x40 - 0x09 = 0x37 (H set), adjust -6", 0x37, FlagN | FlagH, 0x31, false, false, false, true},
+		{"SUB: result with C flag set", 0x37, FlagN | FlagC, 0xD7, false, false, true, true},
+		{"SUB: result with C+H flags", 0x37, FlagN | FlagC | FlagH, 0xD1, false, false, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up initial state
+			cpu.Registers.A = tt.a
+			cpu.Registers.F = tt.flags
+			cpu.Registers.PC = 0x0100
+
+			// DAA instruction
+			mem.data[0x0100] = 0x27
+
+			cpu.Step()
+
+			if cpu.Registers.A != tt.expected {
+				t.Errorf("A = 0x%02X, want 0x%02X", cpu.Registers.A, tt.expected)
+			}
+			if cpu.Registers.ZeroFlag() != tt.expectZ {
+				t.Errorf("Z flag = %v, want %v", cpu.Registers.ZeroFlag(), tt.expectZ)
+			}
+			if cpu.Registers.HalfCarryFlag() != tt.expectH {
+				t.Errorf("H flag = %v, want %v (should be cleared)", cpu.Registers.HalfCarryFlag(), tt.expectH)
+			}
+			if cpu.Registers.CarryFlag() != tt.expectC {
+				t.Errorf("C flag = %v, want %v", cpu.Registers.CarryFlag(), tt.expectC)
+			}
+			if cpu.Registers.SubtractFlag() != tt.expectN {
+				t.Errorf("N flag = %v, want %v (should preserve)", cpu.Registers.SubtractFlag(), tt.expectN)
+			}
+		})
+	}
+}
+
+func TestConditionalJumps(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	tests := []struct {
+		name       string
+		opcode     uint8
+		offset     int8
+		flags      uint8
+		shouldJump bool
+	}{
+		// JR NZ (0x20)
+		{"JR NZ with Z=0 (should jump)", 0x20, 5, 0x00, true},
+		{"JR NZ with Z=1 (should not jump)", 0x20, 5, FlagZ, false},
+
+		// JR Z (0x28)
+		{"JR Z with Z=1 (should jump)", 0x28, 5, FlagZ, true},
+		{"JR Z with Z=0 (should not jump)", 0x28, 5, 0x00, false},
+
+		// JR NC (0x30)
+		{"JR NC with C=0 (should jump)", 0x30, 5, 0x00, true},
+		{"JR NC with C=1 (should not jump)", 0x30, 5, FlagC, false},
+
+		// JR C (0x38)
+		{"JR C with C=1 (should jump)", 0x38, 5, FlagC, true},
+		{"JR C with C=0 (should not jump)", 0x38, 5, 0x00, false},
+
+		// Test negative offset
+		{"JR NZ backward (should jump)", 0x20, -3, 0x00, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cpu.Registers.PC = 0x0100
+			cpu.Registers.F = tt.flags
+
+			mem.data[0x0100] = tt.opcode
+			mem.data[0x0101] = uint8(tt.offset) //nolint:gosec // G115: Intentional signed to unsigned conversion for test
+
+			cycles := cpu.Step()
+
+			expectedPC := uint16(0x0102)
+			if tt.shouldJump {
+				expectedPC = uint16(int32(0x0102) + int32(tt.offset)) //nolint:gosec // G115: Intentional conversion
+				if cycles != 12 {
+					t.Errorf("Cycles = %d, want 12 (taken)", cycles)
+				}
+			} else if cycles != 8 {
+				t.Errorf("Cycles = %d, want 8 (not taken)", cycles)
+			}
+
+			if cpu.Registers.PC != expectedPC {
+				t.Errorf("PC = 0x%04X, want 0x%04X", cpu.Registers.PC, expectedPC)
+			}
+		})
+	}
+}
+
+func TestConditionalCalls(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	tests := []struct {
+		name       string
+		opcode     uint8
+		flags      uint8
+		shouldCall bool
+	}{
+		// CALL NZ (0xC4)
+		{"CALL NZ with Z=0 (should call)", 0xC4, 0x00, true},
+		{"CALL NZ with Z=1 (should not call)", 0xC4, FlagZ, false},
+
+		// CALL Z (0xCC)
+		{"CALL Z with Z=1 (should call)", 0xCC, FlagZ, true},
+		{"CALL Z with Z=0 (should not call)", 0xCC, 0x00, false},
+
+		// CALL NC (0xD4)
+		{"CALL NC with C=0 (should call)", 0xD4, 0x00, true},
+		{"CALL NC with C=1 (should not call)", 0xD4, FlagC, false},
+
+		// CALL C (0xDC)
+		{"CALL C with C=1 (should call)", 0xDC, FlagC, true},
+		{"CALL C with C=0 (should not call)", 0xDC, 0x00, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cpu.Registers.PC = 0x0100
+			cpu.Registers.SP = 0xFFFE
+			cpu.Registers.F = tt.flags
+
+			mem.data[0x0100] = tt.opcode
+			mem.data[0x0101] = 0x34 // Low byte of address
+			mem.data[0x0102] = 0x12 // High byte of address
+
+			cycles := cpu.Step()
+
+			if tt.shouldCall { //nolint:nestif // Test validation complexity is acceptable
+				// PC should be set to 0x1234
+				if cpu.Registers.PC != 0x1234 {
+					t.Errorf("PC = 0x%04X, want 0x1234", cpu.Registers.PC)
+				}
+				// Return address (0x0103) should be on stack
+				if cpu.Registers.SP != 0xFFFC {
+					t.Errorf("SP = 0x%04X, want 0xFFFC", cpu.Registers.SP)
+				}
+				if cycles != 24 {
+					t.Errorf("Cycles = %d, want 24 (taken)", cycles)
+				}
+			} else {
+				// PC should advance past instruction
+				if cpu.Registers.PC != 0x0103 {
+					t.Errorf("PC = 0x%04X, want 0x0103", cpu.Registers.PC)
+				}
+				// SP should not change
+				if cpu.Registers.SP != 0xFFFE {
+					t.Errorf("SP = 0x%04X, want 0xFFFE", cpu.Registers.SP)
+				}
+				if cycles != 12 {
+					t.Errorf("Cycles = %d, want 12 (not taken)", cycles)
+				}
+			}
+		})
+	}
+}
+
+func TestConditionalReturns(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	tests := []struct {
+		name         string
+		opcode       uint8
+		flags        uint8
+		shouldReturn bool
+	}{
+		// RET NZ (0xC0)
+		{"RET NZ with Z=0 (should return)", 0xC0, 0x00, true},
+		{"RET NZ with Z=1 (should not return)", 0xC0, FlagZ, false},
+
+		// RET Z (0xC8)
+		{"RET Z with Z=1 (should return)", 0xC8, FlagZ, true},
+		{"RET Z with Z=0 (should not return)", 0xC8, 0x00, false},
+
+		// RET NC (0xD0)
+		{"RET NC with C=0 (should return)", 0xD0, 0x00, true},
+		{"RET NC with C=1 (should not return)", 0xD0, FlagC, false},
+
+		// RET C (0xD8)
+		{"RET C with C=1 (should return)", 0xD8, FlagC, true},
+		{"RET C with C=0 (should not return)", 0xD8, 0x00, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cpu.Registers.PC = 0x0100
+			cpu.Registers.SP = 0xFFFC
+			cpu.Registers.F = tt.flags
+
+			// Set up return address on stack (0x1234)
+			mem.data[0xFFFC] = 0x34
+			mem.data[0xFFFD] = 0x12
+
+			mem.data[0x0100] = tt.opcode
+
+			cycles := cpu.Step()
+
+			if tt.shouldReturn { //nolint:nestif // Test validation complexity is acceptable
+				// PC should be set to return address
+				if cpu.Registers.PC != 0x1234 {
+					t.Errorf("PC = 0x%04X, want 0x1234", cpu.Registers.PC)
+				}
+				// SP should be popped
+				if cpu.Registers.SP != 0xFFFE {
+					t.Errorf("SP = 0x%04X, want 0xFFFE", cpu.Registers.SP)
+				}
+				if cycles != 20 {
+					t.Errorf("Cycles = %d, want 20 (taken)", cycles)
+				}
+			} else {
+				// PC should advance past instruction
+				if cpu.Registers.PC != 0x0101 {
+					t.Errorf("PC = 0x%04X, want 0x0101", cpu.Registers.PC)
+				}
+				// SP should not change
+				if cpu.Registers.SP != 0xFFFC {
+					t.Errorf("SP = 0x%04X, want 0xFFFC", cpu.Registers.SP)
+				}
+				if cycles != 8 {
+					t.Errorf("Cycles = %d, want 8 (not taken)", cycles)
+				}
+			}
+		})
 	}
 }
