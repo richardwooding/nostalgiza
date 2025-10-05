@@ -176,6 +176,12 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
    - ✅ Palette system (BGP, OBP0, OBP1)
    - ✅ Ebiten display integration
 
+#### In Progress (Phase 3.5)
+3.5. **DMA Transfer** 🚧 (docs/04-graphics.md)
+   - ⏳ DMA transfer implementation (critical for sprite rendering in real games)
+   - Many Game Boy games rely on DMA to quickly copy sprite data to OAM during V-Blank
+   - Located at memory address 0xFF46
+
 #### Planned (Phases 4+)
 4. **Interrupts & Input** (docs/05-interrupts.md, docs/06-input.md)
    - ✅ V-Blank interrupt
