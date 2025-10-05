@@ -18,13 +18,21 @@ const (
 	audioBufferSize = 9600
 )
 
+// AudioOptions configures which audio filters are enabled.
+type AudioOptions struct {
+	EnableLowPass  bool // Low-pass filter for anti-aliasing
+	EnableHighPass bool // High-pass filter for DC offset removal
+	EnableSoftClip bool // Soft clipping (vs hard clipping)
+	EnableDither   bool // Triangular dithering
+}
+
 // AudioPlayer manages audio output for the emulator.
 type AudioPlayer struct {
-	apu           *apu.APU
-	audioContext  *audio.Context
-	audioPlayer   *audio.Player
-	sampleBuffer  []float32
-	resampleRatio float64
+	apu          *apu.APU
+	audioContext *audio.Context
+	audioPlayer  *audio.Player
+	sampleBuffer []float32
+	options      AudioOptions
 
 	// High-pass filter for DC offset removal (single pole)
 	hpFilterLeft  float32
@@ -36,15 +44,15 @@ type AudioPlayer struct {
 }
 
 // NewAudioPlayer creates a new audio player.
-func NewAudioPlayer(apuInstance *apu.APU) (*AudioPlayer, error) {
+func NewAudioPlayer(apuInstance *apu.APU, opts AudioOptions) (*AudioPlayer, error) {
 	audioContext := audio.NewContext(sampleRate)
 
 	// Create the AudioPlayer instance first
 	ap := &AudioPlayer{
-		apu:           apuInstance,
-		audioContext:  audioContext,
-		sampleBuffer:  make([]float32, 0, audioBufferSize),
-		resampleRatio: float64(sampleRate) / 4194304.0,
+		apu:          apuInstance,
+		audioContext: audioContext,
+		sampleBuffer: make([]float32, 0, audioBufferSize),
+		options:      opts,
 	}
 
 	// Create the player using the same AudioPlayer instance
@@ -101,6 +109,8 @@ func (ap *AudioPlayer) Update() {
 }
 
 // Read reads audio samples for playback (implements io.Reader).
+//
+//nolint:gocognit // Complexity from optional filter flags for debugging
 func (ap *AudioPlayer) Read(buf []byte) (int, error) {
 	// Convert buffer to samples (2 bytes per sample, stereo)
 	numSamples := len(buf) / 4 // 4 bytes per stereo sample (2 channels × 2 bytes)
@@ -112,55 +122,96 @@ func (ap *AudioPlayer) Read(buf []byte) (int, error) {
 		samplesToWrite = availableSamples
 	}
 
-	// Convert float32 samples to int16 for audio output with filtering
+	// Convert float32 samples to int16 for audio output with optional filtering
 	const hpFilterFactor = 0.9999 // High-pass filter coefficient (removes DC offset)
 	const lpFilterFactor = 0.90   // Low-pass filter coefficient (removes aliasing/harshness)
 
 	for i := 0; i < samplesToWrite; i++ {
 		// Left channel
 		leftRaw := ap.sampleBuffer[i*2]
+		left := leftRaw
 
-		// Apply low-pass filter first (smooths harsh transitions)
-		ap.lpFilterLeft = ap.lpFilterLeft*lpFilterFactor + leftRaw*(1.0-lpFilterFactor)
-
-		// Then apply high-pass filter (removes DC offset)
-		left := ap.lpFilterLeft - ap.hpFilterLeft
-		ap.hpFilterLeft = ap.hpFilterLeft*hpFilterFactor + ap.lpFilterLeft*(1.0-hpFilterFactor)
-
-		// Soft clipping using tanh-like approximation (smoother than hard clipping)
-		// This prevents harsh distortion from clipping
-		if left > 0.9 {
-			left = 0.9 + (left-0.9)*0.1
-		} else if left < -0.9 {
-			left = -0.9 + (left+0.9)*0.1
+		// Apply low-pass filter (if enabled)
+		if ap.options.EnableLowPass {
+			ap.lpFilterLeft = ap.lpFilterLeft*lpFilterFactor + leftRaw*(1.0-lpFilterFactor)
+			left = ap.lpFilterLeft
 		}
 
-		// Apply triangular dithering to reduce quantization noise
-		dither := (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
-		leftInt16 := int16((left + dither) * 32767.0)
+		// Apply high-pass filter (if enabled)
+		if ap.options.EnableHighPass {
+			leftHP := left - ap.hpFilterLeft
+			ap.hpFilterLeft = ap.hpFilterLeft*hpFilterFactor + left*(1.0-hpFilterFactor)
+			left = leftHP
+		}
+
+		// Apply soft or hard clipping
+		if ap.options.EnableSoftClip { //nolint:nestif // Optional filter for debugging
+			// Soft clipping using tanh-like approximation (smoother than hard clipping)
+			if left > 0.9 {
+				left = 0.9 + (left-0.9)*0.1
+			} else if left < -0.9 {
+				left = -0.9 + (left+0.9)*0.1
+			}
+		} else {
+			// Hard clipping
+			if left > 1.0 {
+				left = 1.0
+			} else if left < -1.0 {
+				left = -1.0
+			}
+		}
+
+		// Apply triangular dithering (if enabled)
+		if ap.options.EnableDither {
+			dither := (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
+			left += dither
+		}
+
+		leftInt16 := int16(left * 32767.0)
 		buf[i*4] = byte(leftInt16)
 		buf[i*4+1] = byte(leftInt16 >> 8)
 
 		// Right channel
 		rightRaw := ap.sampleBuffer[i*2+1]
+		right := rightRaw
 
-		// Apply low-pass filter first (smooths harsh transitions)
-		ap.lpFilterRight = ap.lpFilterRight*lpFilterFactor + rightRaw*(1.0-lpFilterFactor)
-
-		// Then apply high-pass filter (removes DC offset)
-		right := ap.lpFilterRight - ap.hpFilterRight
-		ap.hpFilterRight = ap.hpFilterRight*hpFilterFactor + ap.lpFilterRight*(1.0-hpFilterFactor)
-
-		// Soft clipping using tanh-like approximation (smoother than hard clipping)
-		if right > 0.9 {
-			right = 0.9 + (right-0.9)*0.1
-		} else if right < -0.9 {
-			right = -0.9 + (right+0.9)*0.1
+		// Apply low-pass filter (if enabled)
+		if ap.options.EnableLowPass {
+			ap.lpFilterRight = ap.lpFilterRight*lpFilterFactor + rightRaw*(1.0-lpFilterFactor)
+			right = ap.lpFilterRight
 		}
 
-		// Apply triangular dithering to reduce quantization noise
-		dither = (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
-		rightInt16 := int16((right + dither) * 32767.0)
+		// Apply high-pass filter (if enabled)
+		if ap.options.EnableHighPass {
+			rightHP := right - ap.hpFilterRight
+			ap.hpFilterRight = ap.hpFilterRight*hpFilterFactor + right*(1.0-hpFilterFactor)
+			right = rightHP
+		}
+
+		// Apply soft or hard clipping
+		if ap.options.EnableSoftClip { //nolint:nestif // Optional filter for debugging
+			// Soft clipping
+			if right > 0.9 {
+				right = 0.9 + (right-0.9)*0.1
+			} else if right < -0.9 {
+				right = -0.9 + (right+0.9)*0.1
+			}
+		} else {
+			// Hard clipping
+			if right > 1.0 {
+				right = 1.0
+			} else if right < -1.0 {
+				right = -1.0
+			}
+		}
+
+		// Apply triangular dithering (if enabled)
+		if ap.options.EnableDither {
+			dither := (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
+			right += dither
+		}
+
+		rightInt16 := int16(right * 32767.0)
 		buf[i*4+2] = byte(rightInt16)
 		buf[i*4+3] = byte(rightInt16 >> 8)
 	}

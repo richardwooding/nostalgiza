@@ -25,9 +25,9 @@ type Display struct {
 }
 
 // NewDisplay creates a new display for the emulator.
-func NewDisplay(emu *emulator.Emulator) *Display {
+func NewDisplay(emu *emulator.Emulator, audioOpts AudioOptions) *Display {
 	// Create audio player
-	audioPlayer, err := NewAudioPlayer(emu.APU)
+	audioPlayer, err := NewAudioPlayer(emu.APU, audioOpts)
 	if err != nil {
 		// Audio is optional - continue without it if initialization fails
 		audioPlayer = nil
