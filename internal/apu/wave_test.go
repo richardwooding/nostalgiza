@@ -58,10 +58,10 @@ func TestWaveChannel_OutputLevel(t *testing.T) {
 		outputLevel uint8
 		expected    float32
 	}{
-		{"Mute (0%)", 0, -1.0},      // Sample 0xF >> inf = 0, bipolar: 0/7.5 - 1.0 = -1.0
-		{"100%", 1, 1.0},            // Sample 0xF (no shift) = 15, bipolar: 15/7.5 - 1.0 = 1.0
-		{"50%", 2, -0.066667},       // Sample 0xF >> 1 = 7, bipolar: 7/7.5 - 1.0 = -0.066667
-		{"25%", 3, -0.6},            // Sample 0xF >> 2 = 3, bipolar: 3/7.5 - 1.0 = -0.6
+		{"Mute (0%)", 0, -1.0}, // Sample 0xF >> inf = 0, bipolar: 0/7.5 - 1.0 = -1.0
+		{"100%", 1, 1.0},       // Sample 0xF (no shift) = 15, bipolar: 15/7.5 - 1.0 = 1.0
+		{"50%", 2, -0.066667},  // Sample 0xF >> 1 = 7, bipolar: 7/7.5 - 1.0 = -0.066667
+		{"25%", 3, -0.6},       // Sample 0xF >> 2 = 3, bipolar: 3/7.5 - 1.0 = -0.6
 	}
 
 	for _, tt := range tests {
