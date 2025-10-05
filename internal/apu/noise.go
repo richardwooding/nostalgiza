@@ -72,7 +72,7 @@ func (n *NoiseChannel) clockLFSR() {
 	}
 }
 
-// GetSample returns the current sample output (0.0 to 1.0).
+// GetSample returns the current sample output (-1.0 to +1.0).
 func (n *NoiseChannel) GetSample() float32 {
 	if !n.enabled || !n.dacEnabled {
 		return 0.0
@@ -80,12 +80,13 @@ func (n *NoiseChannel) GetSample() float32 {
 
 	// Output is inverted bit 0 of LFSR
 	bit := (^n.lfsr) & 0x01
-	if bit == 0 {
-		return 0.0
-	}
 
-	// Return volume (0-15) normalized to 0.0-1.0
-	return float32(n.envelopeVolume) / 15.0
+	// Convert to bipolar: 0 -> -1.0, 1 -> +1.0
+	// This centers the waveform around 0 to avoid DC offset
+	sample := float32(bit)*2.0 - 1.0
+
+	// Apply volume (0-15) normalized to 0.0-1.0
+	return sample * float32(n.envelopeVolume) / 15.0
 }
 
 // ClockLength clocks the length timer.

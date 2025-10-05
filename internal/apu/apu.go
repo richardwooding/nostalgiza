@@ -34,7 +34,8 @@ type APU struct {
 	panning uint8 // Channel panning bits
 
 	// Audio output
-	sampleBuffer []float32 // Stereo samples (L, R, L, R, ...)
+	sampleBuffer       []float32 // Stereo samples (L, R, L, R, ...)
+	sampleAccumulator  float64   // Fractional samples accumulated between Update() calls
 }
 
 // New creates a new APU instance.
@@ -106,17 +107,20 @@ func (a *APU) generateSamples(cycles uint16) {
 	// Samples needed = cycles * 48000 / 4194304
 	const sampleRate = 48000.0
 	const cpuClock = 4194304.0
-	samplesNeeded := int(float64(cycles) * sampleRate / cpuClock)
 
-	// Generate the required number of samples
+	// Accumulate fractional samples
+	a.sampleAccumulator += float64(cycles) * sampleRate / cpuClock
+	samplesNeeded := int(a.sampleAccumulator)
+	a.sampleAccumulator -= float64(samplesNeeded) // Keep the fractional part
+
 	for i := 0; i < samplesNeeded; i++ {
-		// Get sample from each channel (0.0 to 1.0)
+		// Get sample from each channel (-1.0 to +1.0)
 		sample1 := a.channel1.GetSample()
 		sample2 := a.channel2.GetSample()
 		sample3 := a.channel3.GetSample()
 		sample4 := a.channel4.GetSample()
 
-		// Mix channels for left and right outputs
+		// Mix channels for left and right outputs with panning
 		var left, right float32
 
 		// Channel 1 panning
@@ -151,13 +155,19 @@ func (a *APU) generateSamples(cycles uint16) {
 			right += sample4
 		}
 
-		// Apply master volume (0-7)
+		// Normalize: divide by 4 channels to get back to -1.0 to +1.0 range
+		left /= 4.0
+		right /= 4.0
+
+		// Apply master volume (0-7, where 7 is full volume)
+		// Volume is linear: 0 = mute, 7 = full
 		left *= float32(a.leftVolume) / 7.0
 		right *= float32(a.rightVolume) / 7.0
 
-		// Normalize (4 channels max)
-		left /= 4.0
-		right /= 4.0
+		// Additional scaling to prevent clipping and reduce distortion
+		// Game Boy audio can be quite harsh, so we scale down a bit
+		left *= 0.6
+		right *= 0.6
 
 		// Add to output buffer (stereo interleaved)
 		a.sampleBuffer = append(a.sampleBuffer, left, right)
@@ -391,6 +401,7 @@ func (a *APU) reset() {
 
 // GetSampleBuffer returns the current audio sample buffer and clears it.
 func (a *APU) GetSampleBuffer() []float32 {
+
 	// Warn if buffer is growing too large (indicates Update() isn't being called regularly)
 	const maxBufferSize = 48000 * 2 // 1 second of stereo samples at 48kHz
 	if len(a.sampleBuffer) > maxBufferSize {

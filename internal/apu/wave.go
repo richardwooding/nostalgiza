@@ -65,8 +65,9 @@ func (w *WaveChannel) GetSample() float32 {
 		sample >>= 2 // 25%
 	}
 
-	// Normalize to 0.0-1.0
-	return float32(sample) / 15.0
+	// Convert to bipolar: 0-15 -> -1.0 to +1.0
+	// This centers the waveform around 0 to avoid DC offset
+	return (float32(sample)/7.5 - 1.0)
 }
 
 // ClockLength clocks the length timer.
