@@ -13,6 +13,18 @@ import (
 	"github.com/richardwooding/nostalgiza/internal/memory"
 )
 
+const (
+	// cyclesPerIteration is the number of cycles to execute between serial output checks.
+	// At 4.19 MHz, 10,000 cycles ≈ 2.4ms.
+	cyclesPerIteration = 10000
+
+	// maxSerialBufferSize limits serial output buffer to prevent unbounded growth.
+	maxSerialBufferSize = 64 * 1024 // 64 KiB
+
+	// initialSerialBufferCapacity is the initial capacity for the serial output buffer.
+	initialSerialBufferCapacity = 1024
+)
+
 var (
 	// ErrTimeout indicates the operation timed out.
 	ErrTimeout = errors.New("timeout waiting for serial output")
@@ -49,7 +61,7 @@ func New(romData []byte) (*Emulator, error) {
 		CPU:          c,
 		Memory:       mem,
 		Cart:         cart,
-		serialOutput: make([]byte, 0, 1024),
+		serialOutput: make([]byte, 0, initialSerialBufferCapacity),
 	}, nil
 }
 
@@ -85,17 +97,15 @@ func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
 		}
 
 		// Execute some cycles
-		e.RunCycles(10000) // Run ~10,000 cycles at a time
+		e.RunCycles(cyclesPerIteration)
 
-		// Check if we got new output
+		// Check if we got new output - only convert to string when data changes
 		if len(e.serialOutput) > lastOutputLen {
 			lastOutputLen = len(e.serialOutput)
 			startTime = time.Now() // Reset timeout on new output
-		}
 
-		// Check if output is complete
-		// Blargg's test ROMs output "Passed" or "Failed" when complete
-		if len(e.serialOutput) > 0 {
+			// Check if output is complete (only when new data arrives)
+			// Blargg's test ROMs output "Passed" or "Failed" when complete
 			output := string(e.serialOutput)
 			if strings.Contains(output, "Passed") || strings.Contains(output, "Failed") {
 				return output, nil
@@ -118,8 +128,7 @@ func (e *Emulator) handleSerialOutput() {
 		sb := e.Memory.Read(0xFF01)
 
 		// Append to output buffer (with size limit to prevent unbounded growth)
-		const maxBufferSize = 64 * 1024 // 64 KiB limit
-		if len(e.serialOutput) < maxBufferSize {
+		if len(e.serialOutput) < maxSerialBufferSize {
 			e.serialOutput = append(e.serialOutput, sb)
 		}
 
@@ -136,5 +145,5 @@ func (e *Emulator) GetSerialOutput() string {
 // Reset resets the emulator to initial state.
 func (e *Emulator) Reset() {
 	e.CPU = cpu.New(e.Memory)
-	e.serialOutput = make([]byte, 0, 1024)
+	e.serialOutput = make([]byte, 0, initialSerialBufferCapacity)
 }
