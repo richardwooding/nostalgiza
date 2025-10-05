@@ -92,11 +92,11 @@ func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
 			startTime = time.Now() // Reset timeout on new output
 		}
 
-		// Check if output is complete (ends with newline or specific marker)
+		// Check if output is complete
+		// Blargg's test ROMs output "Passed" or "Failed" when complete
 		if len(e.serialOutput) > 0 {
 			output := string(e.serialOutput)
-			// Blargg's test ROMs typically end with "Passed" or "Failed"
-			if containsAny(output, []string{"Passed", "Failed", "\n\n"}) {
+			if containsAny(output, []string{"Passed", "Failed"}) {
 				return output, nil
 			}
 		}
