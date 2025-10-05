@@ -20,6 +20,9 @@ var (
 
 	// ErrTestFailed indicates a test ROM failed.
 	ErrTestFailed = errors.New("test failed")
+
+	// ErrInvalidScale indicates the scale factor is out of valid range.
+	ErrInvalidScale = errors.New("scale must be between 1 and 10")
 )
 
 // CLI represents the command-line interface structure.
@@ -72,7 +75,7 @@ type RunCmd struct {
 func (c *RunCmd) Run() error {
 	// Validate scale factor
 	if c.Scale < 1 || c.Scale > 10 {
-		return fmt.Errorf("scale must be between 1 and 10, got %d", c.Scale)
+		return fmt.Errorf("%w: got %d", ErrInvalidScale, c.Scale)
 	}
 
 	// Read ROM file
