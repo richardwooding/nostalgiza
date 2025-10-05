@@ -38,14 +38,65 @@ Comprehensive technical documentation is available in the [`docs/`](docs/) folde
 ## Building
 
 ```bash
+# Build all packages
 go build ./...
+
+# Build the nostalgiza CLI
+go build ./cmd/nostalgiza
+```
+
+## Usage
+
+### CLI Commands
+
+```bash
+# Display cartridge information
+./nostalgiza info <rom-file>
+
+# Run a Game Boy ROM (not yet implemented - requires Phase 3+)
+./nostalgiza run <rom-file>
+
+# Run a test ROM and report results
+./nostalgiza test <test-rom> [--timeout 30] [-v]
+```
+
+### Examples
+
+```bash
+# Show ROM information
+./nostalgiza info game.gb
+
+# Run a test ROM
+./nostalgiza test testdata/blargg/cpu_instrs/01-special.gb
+
+# Run with verbose output
+./nostalgiza test testdata/blargg/cpu_instrs/01-special.gb -v
 ```
 
 ## Testing
 
+### Unit Tests
 ```bash
+# Run all unit tests
 go test ./...
+
+# Run with coverage
+go test -cover ./...
 ```
+
+### Integration Tests (Blargg's Test ROMs)
+```bash
+# Download test ROMs first (see testdata/blargg/README.md)
+git clone https://github.com/retrio/gb-test-roms.git
+
+# Run integration tests
+go test ./cmd/nostalgiza/...
+
+# Skip integration tests (short mode)
+go test ./cmd/nostalgiza/... -short
+```
+
+See [testdata/blargg/README.md](testdata/blargg/README.md) for detailed test ROM setup and usage.
 
 ## Resources
 

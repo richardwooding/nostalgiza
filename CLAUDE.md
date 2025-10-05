@@ -19,11 +19,20 @@ NostalgiZA is a Game Boy (DMG) emulator written in Go.
 # Build the project
 go build ./...
 
+# Build the nostalgiza CLI
+go build ./cmd/nostalgiza
+
 # Run tests
 go test ./...
 
 # Run tests with coverage
 go test -cover ./...
+
+# Run integration tests (requires Blargg's test ROMs)
+go test ./cmd/nostalgiza/...
+
+# Skip integration tests (short mode)
+go test ./cmd/nostalgiza/... -short
 
 # Run a specific test
 go test -run TestName ./path/to/package
@@ -39,6 +48,19 @@ golangci-lint config verify
 
 # Tidy dependencies
 go mod tidy
+```
+
+## CLI Usage
+
+```bash
+# Display cartridge information
+./nostalgiza info <rom-file>
+
+# Run a Game Boy ROM (not yet implemented - requires Phase 3+)
+./nostalgiza run <rom-file>
+
+# Run a test ROM and report results
+./nostalgiza test <test-rom> [--timeout 30] [-v]
 ```
 
 ## Code Quality Tools
