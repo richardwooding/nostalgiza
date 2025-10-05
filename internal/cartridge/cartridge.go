@@ -32,10 +32,19 @@ var ErrInvalidCartridgeType = errors.New("invalid or unsupported cartridge type"
 // ErrROMSizeMismatch indicates the ROM size doesn't match the header.
 var ErrROMSizeMismatch = errors.New("ROM size does not match header")
 
+// ErrROMTooLarge indicates the ROM size exceeds the maximum allowed size.
+var ErrROMTooLarge = errors.New("ROM size exceeds maximum allowed size of 8 MiB")
+
 // New creates a new cartridge from ROM data.
 // It automatically detects the cartridge type from the header and creates
 // the appropriate implementation (ROM-only, MBC1, MBC3, MBC5, etc.).
 func New(rom []byte) (Cartridge, error) {
+	// Check maximum ROM size (8 MiB)
+	const maxROMSize = 8 * 1024 * 1024 // 8 MiB
+	if len(rom) > maxROMSize {
+		return nil, fmt.Errorf("%w: got %d bytes", ErrROMTooLarge, len(rom))
+	}
+
 	// Parse header
 	header, err := ParseHeader(rom)
 	if err != nil {

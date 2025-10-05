@@ -16,6 +16,10 @@ NostalgiZA is a cycle-accurate Game Boy emulator targeting the original Game Boy
 - [ ] Save state support
 - [ ] Debugger and disassembler
 
+## Requirements
+
+- **Go 1.25.0 or later** (intentionally using latest Go version features)
+
 ## Documentation
 
 Comprehensive technical documentation is available in the [`docs/`](docs/) folder:

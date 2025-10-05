@@ -6,10 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 NostalgiZA is a Game Boy (DMG) emulator written in Go.
 
-- **Language**: Go 1.25.0
+- **Language**: Go 1.25.x (intentionally using latest Go version features)
 - **Module**: github.com/richardwooding/nostalgiza
 - **License**: MIT
 - **Target Platform**: Game Boy (DMG - original monochrome model)
+
+**Note**: This project uses Go 1.25.x intentionally to leverage the latest language features and improvements. Ensure you have Go 1.25.0 or later installed.
 
 ## Development Commands
 
