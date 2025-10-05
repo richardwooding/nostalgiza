@@ -29,11 +29,53 @@ go test -run TestName ./path/to/package
 # Format code
 go fmt ./...
 
-# Run linter (if installed)
+# Run linter
 golangci-lint run
+
+# Verify linter configuration
+golangci-lint config verify
 
 # Tidy dependencies
 go mod tidy
+```
+
+## Code Quality Tools
+
+### golangci-lint v2.5.0
+
+The project uses golangci-lint v2.5.0 for comprehensive code quality checks.
+
+**Installation:**
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+```
+
+**Configuration:**
+- File: `.golangci.yml` (project root)
+- Version: 2
+- Validated against: https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+
+**Enabled Linters:**
+- **Code Quality**: revive, govet, staticcheck, gosimple, unused
+- **Error Handling**: errcheck, errorlint, err113
+- **Performance**: prealloc, gocritic
+- **Code Style**: gofmt, goimports, gci, whitespace
+- **Bug Detection**: gosec, bodyclose, nilerr, nilnil
+- **Complexity**: gocyclo, gocognit, nestif
+- **Documentation**: godot, misspell
+- **Testing**: testifylint, thelper
+- **Miscellaneous**: ineffassign, unconvert, unparam, wastedassign
+
+**Usage:**
+```bash
+# Run all linters
+golangci-lint run
+
+# Run with fixes
+golangci-lint run --fix
+
+# Verify configuration
+golangci-lint config verify
 ```
 
 ## Project Structure

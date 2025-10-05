@@ -1,0 +1,76 @@
+# golangci-lint v2.5.0 configuration for NostalgiZA Game Boy Emulator
+# Configuration validated against: https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+# Requires Go 1.25.0
+# Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+# Validate: golangci-lint config verify
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  go: "1.25"
+
+output:
+  formats:
+    json:
+      path: stderr
+
+linters:
+  enable:
+    # Code Quality & Best Practices
+    - revive
+    - govet
+    - staticcheck
+    - unused
+
+    # Error Handling
+    - errcheck
+    - errorlint
+    - err113
+
+    # Performance
+    - prealloc
+    - gocritic
+
+    # Code Style
+    - whitespace
+
+    # Bug Detection
+    - gosec
+    - bodyclose
+    - nilerr
+    - nilnil
+
+    # Complexity
+    - gocyclo
+    - gocognit
+    - nestif
+
+    # Comments & Documentation
+    - godot
+    - misspell
+
+    # Testing
+    - testifylint
+    - thelper
+
+    # Miscellaneous
+    - ineffassign
+    - unconvert
+    - unparam
+    - wastedassign
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - gci
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+severity:
+  default: error
