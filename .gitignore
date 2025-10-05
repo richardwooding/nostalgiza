@@ -33,3 +33,6 @@ go.work.sum
 
 # Linter cache
 .golangci-cache/
+
+# Claude Code local settings
+.claude/settings.local.json

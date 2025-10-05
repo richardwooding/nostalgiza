@@ -11,37 +11,41 @@ func TestNewBus(t *testing.T) {
 		t.Fatal("NewBus() returned nil")
 	}
 
-	if bus.currentROMBank != 1 {
-		t.Errorf("currentROMBank = %d, want 1", bus.currentROMBank)
-	}
-
-	if bus.currentRAMBank != 0 {
-		t.Errorf("currentRAMBank = %d, want 0", bus.currentRAMBank)
-	}
-
-	if bus.ramEnabled {
-		t.Error("ramEnabled should be false initially")
+	// Cartridge should be nil initially
+	if bus.cartridge != nil {
+		t.Error("cartridge should be nil initially")
 	}
 }
 
 func TestROMAccess(t *testing.T) {
 	bus := NewBus()
 
+	// Load a simple ROM
+	rom := make([]byte, 0x8000) // 32 KiB
+	rom[0x0100] = 0x42
+	rom[0x4000] = 0x84
+
+	// Setup minimal header
+	setupTestROMHeader(rom)
+
+	err := bus.LoadROM(rom)
+	if err != nil {
+		t.Fatalf("LoadROM() error = %v", err)
+	}
+
 	// Test ROM Bank 00 (0000-3FFF)
-	bus.rom0[0x0100] = 0x42
 	value := bus.Read(0x0100)
 	if value != 0x42 {
 		t.Errorf("Read(0x0100) = %02X, want 0x42", value)
 	}
 
 	// Test ROM Bank 01 (4000-7FFF)
-	bus.rom1[0x0000] = 0x84
 	value = bus.Read(0x4000)
 	if value != 0x84 {
 		t.Errorf("Read(0x4000) = %02X, want 0x84", value)
 	}
 
-	// Writing to ROM should be ignored
+	// Writing to ROM should be ignored (MBC control)
 	bus.Write(0x0100, 0xFF)
 	value = bus.Read(0x0100)
 	if value != 0x42 {
@@ -154,6 +158,24 @@ func TestInterruptEnableRegister(t *testing.T) {
 func TestExternalRAM(t *testing.T) {
 	bus := NewBus()
 
+	// Load a ROM with MBC1+RAM (so RAM can be enabled/disabled)
+	rom := make([]byte, 0x8000)
+	setupTestROMHeader(rom)
+	rom[0x0147] = 0x02 // MBC1+RAM
+	rom[0x0149] = 0x02 // 8 KiB RAM
+
+	// Recalculate checksum
+	checksum := byte(0)
+	for addr := 0x0134; addr <= 0x014C; addr++ {
+		checksum = checksum - rom[addr] - 1
+	}
+	rom[0x014D] = checksum
+
+	err := bus.LoadROM(rom)
+	if err != nil {
+		t.Fatalf("LoadROM() error = %v", err)
+	}
+
 	// External RAM should not be accessible when disabled
 	bus.Write(0xA000, 0x42)
 	value := bus.Read(0xA000)
@@ -161,8 +183,8 @@ func TestExternalRAM(t *testing.T) {
 		t.Errorf("Read(0xA000) with RAM disabled = %02X, want 0xFF", value)
 	}
 
-	// Enable external RAM
-	bus.ramEnabled = true
+	// Enable external RAM (write 0x0A to 0x0000-0x1FFF for MBC1 RAM enable)
+	bus.Write(0x0000, 0x0A)
 
 	// Now it should be accessible
 	bus.Write(0xA000, 0x42)
@@ -172,7 +194,7 @@ func TestExternalRAM(t *testing.T) {
 	}
 
 	// Disable again
-	bus.ramEnabled = false
+	bus.Write(0x0000, 0x00)
 	value = bus.Read(0xA000)
 	if value != 0xFF {
 		t.Errorf("Read(0xA000) after disabling RAM = %02X, want 0xFF", value)
@@ -230,6 +252,8 @@ func TestLoadROM(t *testing.T) {
 
 	// Create a test ROM (32 KiB)
 	rom := make([]byte, 0x8000)
+	setupTestROMHeader(rom)
+
 	rom[0x0100] = 0x00 // NOP at entry point
 	rom[0x0104] = 0xCE // Nintendo logo byte
 	rom[0x4000] = 0x42 // First byte of ROM bank 1
@@ -251,34 +275,33 @@ func TestLoadROM(t *testing.T) {
 	if bus.Read(0x4000) != 0x42 {
 		t.Errorf("ROM Bank 01 not loaded correctly")
 	}
+
+	// Verify cartridge was loaded
+	if bus.GetCartridge() == nil {
+		t.Error("Cartridge should be loaded")
+	}
 }
 
 func TestLoadROMSizeValidation(t *testing.T) {
 	bus := NewBus()
 
-	// Test ROM too small (less than 16 KiB)
-	tooSmall := make([]byte, 0x3000) // 12 KiB
+	// Test ROM too small (less than 336 bytes for header)
+	tooSmall := make([]byte, 0x100) // 256 bytes
 	err := bus.LoadROM(tooSmall)
 	if err == nil {
-		t.Error("Expected error for ROM smaller than 16 KiB, got nil")
+		t.Error("Expected error for ROM smaller than header size, got nil")
 	}
 
-	// Test minimum valid ROM (16 KiB)
-	minROM := make([]byte, 0x4000)
-	err = bus.LoadROM(minROM)
+	// Test standard 32 KiB ROM (matches header default)
+	standardROM := make([]byte, 0x8000)
+	setupTestROMHeader(standardROM)
+	standardROM[0x4FFF] = 0x99
+	err = bus.LoadROM(standardROM)
 	if err != nil {
-		t.Errorf("Expected no error for 16 KiB ROM, got: %v", err)
-	}
-
-	// Test partial second bank (20 KiB)
-	partialROM := make([]byte, 0x5000)
-	partialROM[0x4FFF] = 0x99
-	err = bus.LoadROM(partialROM)
-	if err != nil {
-		t.Errorf("Expected no error for partial ROM, got: %v", err)
+		t.Errorf("Expected no error for 32 KiB ROM, got: %v", err)
 	}
 	if bus.Read(0x4FFF) != 0x99 {
-		t.Errorf("Partial ROM not loaded correctly")
+		t.Errorf("ROM not loaded correctly")
 	}
 }
 
@@ -437,4 +460,27 @@ func TestEchoRAMMirroring(t *testing.T) {
 			}
 		})
 	}
+}
+
+
+// setupTestROMHeader sets up a minimal valid ROM header for testing.
+func setupTestROMHeader(rom []byte) {
+	// Title
+	copy(rom[0x0134:], []byte("TEST"))
+
+	// Cartridge type (0x00 = ROM only)
+	rom[0x0147] = 0x00
+
+	// ROM size (0x00 = 32 KiB)
+	rom[0x0148] = 0x00
+
+	// RAM size (0x00 = No RAM)
+	rom[0x0149] = 0x00
+
+	// Calculate header checksum
+	checksum := byte(0)
+	for addr := 0x0134; addr <= 0x014C; addr++ {
+		checksum = checksum - rom[addr] - 1
+	}
+	rom[0x014D] = checksum
 }
