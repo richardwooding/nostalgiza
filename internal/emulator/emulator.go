@@ -5,6 +5,7 @@ package emulator
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
@@ -96,7 +97,7 @@ func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
 		// Blargg's test ROMs output "Passed" or "Failed" when complete
 		if len(e.serialOutput) > 0 {
 			output := string(e.serialOutput)
-			if containsAny(output, []string{"Passed", "Failed"}) {
+			if strings.Contains(output, "Passed") || strings.Contains(output, "Failed") {
 				return output, nil
 			}
 		}
@@ -116,8 +117,11 @@ func (e *Emulator) handleSerialOutput() {
 		// Read serial data
 		sb := e.Memory.Read(0xFF01)
 
-		// Append to output buffer
-		e.serialOutput = append(e.serialOutput, sb)
+		// Append to output buffer (with size limit to prevent unbounded growth)
+		const maxBufferSize = 64 * 1024 // 64 KiB limit
+		if len(e.serialOutput) < maxBufferSize {
+			e.serialOutput = append(e.serialOutput, sb)
+		}
 
 		// Clear transfer flag
 		e.Memory.Write(0xFF02, sc&0x7F)
@@ -133,18 +137,4 @@ func (e *Emulator) GetSerialOutput() string {
 func (e *Emulator) Reset() {
 	e.CPU = cpu.New(e.Memory)
 	e.serialOutput = make([]byte, 0, 1024)
-}
-
-// containsAny checks if the string contains any of the substrings.
-func containsAny(s string, substrs []string) bool {
-	for _, substr := range substrs {
-		if len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }

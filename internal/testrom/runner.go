@@ -2,6 +2,7 @@
 package testrom
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -43,7 +44,7 @@ func Run(romPath string, timeout time.Duration) *Result {
 	result.Output = output
 
 	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
+		if errors.Is(err, emulator.ErrTimeout) {
 			result.Timeout = true
 		}
 		result.Error = err
