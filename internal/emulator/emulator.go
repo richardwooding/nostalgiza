@@ -34,7 +34,7 @@ var (
 type Emulator struct {
 	CPU    *cpu.CPU
 	Memory *memory.Bus
-	Cart   cartridge.Cartridge
+	Cart   cartridge.Cartridge // nolint:unused // Reserved for future save state/MBC features
 
 	// Serial output buffer for test ROMs
 	serialOutput []byte
@@ -144,6 +144,7 @@ func (e *Emulator) GetSerialOutput() string {
 
 // Reset resets the emulator to initial state.
 func (e *Emulator) Reset() {
+	e.Memory.Reset()
 	e.CPU = cpu.New(e.Memory)
 	e.serialOutput = make([]byte, 0, initialSerialBufferCapacity)
 }

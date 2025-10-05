@@ -52,8 +52,9 @@ func Run(romPath string, timeout time.Duration) *Result {
 	}
 
 	// Parse output for pass/fail
-	result.Passed = strings.Contains(output, "Passed")
+	// Check "Failed" first to avoid ambiguity if both strings are present
 	result.Failed = strings.Contains(output, "Failed")
+	result.Passed = strings.Contains(output, "Passed") && !result.Failed
 
 	return result
 }
