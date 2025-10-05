@@ -36,3 +36,8 @@ go.work.sum
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Test ROMs (not included due to licensing)
+testdata/**/*.gb
+testdata/**/*.gbc
+!testdata/test.gb

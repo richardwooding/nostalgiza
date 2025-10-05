@@ -251,3 +251,28 @@ func (b *Bus) LoadROM(rom []byte) error {
 func (b *Bus) GetCartridge() cartridge.Cartridge {
 	return b.cartridge
 }
+
+// Reset clears all RAM while keeping the cartridge loaded.
+// Note: Cartridge RAM is not cleared as it may be battery-backed.
+func (b *Bus) Reset() {
+	// Clear VRAM (using Go 1.25 clear() built-in)
+	clear(b.vram[:])
+
+	// Clear Work RAM
+	clear(b.wram[:])
+
+	// Clear OAM
+	clear(b.oam[:])
+
+	// Clear I/O registers
+	clear(b.io[:])
+
+	// Clear High RAM
+	clear(b.hram[:])
+
+	// Clear Interrupt Enable
+	b.ie = 0
+
+	// Reset PPU mode
+	b.ppuMode = 0
+}
