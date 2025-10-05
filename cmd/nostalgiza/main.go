@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
+	"github.com/richardwooding/nostalgiza/internal/emulator"
 	"github.com/richardwooding/nostalgiza/internal/testrom"
 )
 
@@ -67,7 +69,32 @@ type RunCmd struct {
 
 // Run executes the run command.
 func (c *RunCmd) Run() error {
-	return fmt.Errorf("%w: run command requires PPU and input (Phase 3+)", ErrNotImplemented)
+	// Read ROM file
+	data, err := os.ReadFile(c.ROM)
+	if err != nil {
+		return fmt.Errorf("failed to read ROM: %w", err)
+	}
+
+	// Create emulator instance
+	emu, err := emulator.New(data)
+	if err != nil {
+		return fmt.Errorf("failed to create emulator: %w", err)
+	}
+
+	// Create display
+	display := NewDisplay(emu)
+
+	// Configure Ebiten window
+	ebiten.SetWindowTitle("NostalgiZA - Game Boy Emulator")
+	ebiten.SetWindowSize(160*3, 144*3) // 3x scale for better visibility
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+
+	// Run the emulator
+	if err := ebiten.RunGame(display); err != nil {
+		return fmt.Errorf("emulator error: %w", err)
+	}
+
+	return nil
 }
 
 // TestCmd runs a test ROM and reports results.

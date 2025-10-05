@@ -8,19 +8,26 @@ import (
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
 )
 
+// PPU is an interface for the Picture Processing Unit.
+type PPU interface {
+	ReadVRAM(addr uint16) uint8
+	WriteVRAM(addr uint16, value uint8)
+	ReadOAM(addr uint16) uint8
+	WriteOAM(addr uint16, value uint8)
+	ReadRegister(addr uint16) uint8
+	WriteRegister(addr uint16, value uint8)
+}
+
 // Bus represents the Game Boy memory bus.
 type Bus struct {
 	// Cartridge (ROM and external RAM are handled by cartridge)
 	cartridge cartridge.Cartridge
 
-	// VRAM (8 KiB)
-	vram [0x2000]uint8 // 8000-9FFF: Video RAM
+	// PPU for video memory and registers
+	ppu PPU
 
 	// Work RAM (8 KiB)
 	wram [0x2000]uint8 // C000-DFFF: Work RAM
-
-	// OAM (160 bytes)
-	oam [0xA0]uint8 // FE00-FE9F: Object Attribute Memory
 
 	// I/O Registers (128 bytes)
 	io [0x80]uint8 // FF00-FF7F: I/O Registers
@@ -30,21 +37,21 @@ type Bus struct {
 
 	// Interrupt Enable Register (1 byte)
 	ie uint8 // FFFF: Interrupt Enable
-
-	// PPU mode for access restrictions (stub for now)
-	ppuMode uint8
 }
 
 // NewBus creates a new memory bus.
 func NewBus() *Bus {
-	return &Bus{
-		ppuMode: 0,
-	}
+	return &Bus{}
 }
 
 // SetCartridge sets the cartridge for the memory bus.
 func (b *Bus) SetCartridge(cart cartridge.Cartridge) {
 	b.cartridge = cart
+}
+
+// SetPPU sets the PPU for the memory bus.
+func (b *Bus) SetPPU(ppu PPU) {
+	b.ppu = ppu
 }
 
 // Read reads a byte from the memory bus.
@@ -60,8 +67,10 @@ func (b *Bus) Read(addr uint16) uint8 {
 
 	// VRAM (8000-9FFF)
 	case addr < 0xA000:
-		// TODO: Check PPU mode for access restrictions (Phase 3)
-		return b.vram[addr-0x8000]
+		if b.ppu != nil {
+			return b.ppu.ReadVRAM(addr - 0x8000)
+		}
+		return 0xFF
 
 	// External RAM (A000-BFFF) - Handled by cartridge
 	case addr < 0xC000:
@@ -84,8 +93,10 @@ func (b *Bus) Read(addr uint16) uint8 {
 
 	// OAM (FE00-FE9F)
 	case addr < 0xFEA0:
-		// TODO: Check PPU mode for access restrictions (Phase 3)
-		return b.oam[addr-0xFE00]
+		if b.ppu != nil {
+			return b.ppu.ReadOAM(addr - 0xFE00)
+		}
+		return 0xFF
 
 	// Not Usable (FEA0-FEFF)
 	case addr < 0xFF00:
@@ -120,8 +131,9 @@ func (b *Bus) Write(addr uint16, value uint8) {
 
 	// VRAM (8000-9FFF)
 	case addr < 0xA000:
-		// TODO: Check PPU mode for access restrictions (Phase 3)
-		b.vram[addr-0x8000] = value
+		if b.ppu != nil {
+			b.ppu.WriteVRAM(addr-0x8000, value)
+		}
 
 	// External RAM (A000-BFFF) - Handled by cartridge
 	case addr < 0xC000:
@@ -143,8 +155,9 @@ func (b *Bus) Write(addr uint16, value uint8) {
 
 	// OAM (FE00-FE9F)
 	case addr < 0xFEA0:
-		// TODO: Check PPU mode for access restrictions (Phase 3)
-		b.oam[addr-0xFE00] = value
+		if b.ppu != nil {
+			b.ppu.WriteOAM(addr-0xFE00, value)
+		}
 
 	// Not Usable (FEA0-FEFF)
 	case addr < 0xFF00:
@@ -185,29 +198,13 @@ func (b *Bus) readIO(addr uint16) uint8 {
 		return b.io[offset]
 	case 0xFF0F: // IF - Interrupt flags
 		return b.io[offset]
-	case 0xFF40: // LCDC - LCD control
-		return b.io[offset]
-	case 0xFF41: // STAT - LCD status
-		return b.io[offset]
-	case 0xFF42: // SCY - Scroll Y
-		return b.io[offset]
-	case 0xFF43: // SCX - Scroll X
-		return b.io[offset]
-	case 0xFF44: // LY - LCD Y coordinate
-		return b.io[offset]
-	case 0xFF45: // LYC - LY compare
-		return b.io[offset]
+	case 0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B:
+		// PPU registers (0xFF40-0xFF4B except 0xFF46)
+		if b.ppu != nil {
+			return b.ppu.ReadRegister(addr)
+		}
+		return 0xFF
 	case 0xFF46: // DMA - DMA transfer
-		return b.io[offset]
-	case 0xFF47: // BGP - BG palette
-		return b.io[offset]
-	case 0xFF48: // OBP0 - Object palette 0
-		return b.io[offset]
-	case 0xFF49: // OBP1 - Object palette 1
-		return b.io[offset]
-	case 0xFF4A: // WY - Window Y
-		return b.io[offset]
-	case 0xFF4B: // WX - Window X
 		return b.io[offset]
 	default:
 		return b.io[offset]
@@ -225,6 +222,11 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 	switch addr {
 	case 0xFF04: // DIV - Divider register (writing resets to 0)
 		b.io[offset] = 0
+	case 0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B:
+		// PPU registers (0xFF40-0xFF4B except 0xFF46)
+		if b.ppu != nil {
+			b.ppu.WriteRegister(addr, value)
+		}
 	case 0xFF46: // DMA - DMA transfer
 		// TODO: Implement DMA transfer (Phase 3)
 		b.io[offset] = value
@@ -252,17 +254,11 @@ func (b *Bus) GetCartridge() cartridge.Cartridge {
 	return b.cartridge
 }
 
-// Reset clears all RAM while keeping the cartridge loaded.
+// Reset clears all RAM while keeping the cartridge and PPU loaded.
 // Note: Cartridge RAM is not cleared as it may be battery-backed.
 func (b *Bus) Reset() {
-	// Clear VRAM (using Go 1.25 clear() built-in)
-	clear(b.vram[:])
-
 	// Clear Work RAM
 	clear(b.wram[:])
-
-	// Clear OAM
-	clear(b.oam[:])
 
 	// Clear I/O registers
 	clear(b.io[:])
@@ -272,7 +268,4 @@ func (b *Bus) Reset() {
 
 	// Clear Interrupt Enable
 	b.ie = 0
-
-	// Reset PPU mode
-	b.ppuMode = 0
 }

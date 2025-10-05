@@ -56,12 +56,24 @@ go mod tidy
 # Display cartridge information
 ./nostalgiza info <rom-file>
 
-# Run a Game Boy ROM (not yet implemented - requires Phase 3+)
+# Run a Game Boy ROM with graphics (Ebiten window)
 ./nostalgiza run <rom-file>
 
 # Run a test ROM and report results
 ./nostalgiza test <test-rom> [--timeout 30] [-v]
 ```
+
+## Graphics Library
+
+The project uses **Ebiten (Ebitengine)** v2.8.7 for graphics rendering and window management:
+
+- **Package**: `github.com/hajimehoshi/ebiten/v2`
+- **Website**: https://ebitengine.org/
+- **License**: Apache 2.0
+- **Platform Support**: Cross-platform (macOS, Linux, Windows, mobile, web)
+- **Features**: Pure Go (no CGO required on Windows), actively maintained, includes audio support
+
+The PPU (Picture Processing Unit) renders to a framebuffer which is then displayed using Ebiten's game interface.
 
 ## Code Quality Tools
 
@@ -117,15 +129,22 @@ nostalgiza/
 │   ├── 07-timers.md
 │   ├── 08-audio.md
 │   └── 09-boot-sequence.md
-├── cmd/            # Main applications (to be created)
-├── internal/       # Internal packages (to be created)
-│   ├── cpu/       # CPU emulation
-│   ├── memory/    # Memory management and MBCs
-│   ├── ppu/       # Graphics (Picture Processing Unit)
-│   ├── apu/       # Audio (Audio Processing Unit)
-│   ├── cartridge/ # Cartridge loading and MBC implementations
-│   └── input/     # Joypad input handling
-└── pkg/           # Public packages (to be created)
+├── cmd/
+│   └── nostalgiza/ # Main CLI application
+│       ├── main.go    # CLI commands
+│       ├── display.go # Ebiten display integration
+│       └── *_test.go  # Integration tests
+├── internal/
+│   ├── cpu/        # CPU emulation (implemented)
+│   ├── memory/     # Memory bus and mapping (implemented)
+│   ├── ppu/        # Picture Processing Unit (implemented)
+│   ├── cartridge/  # Cartridge loading and MBC1 (implemented)
+│   ├── emulator/   # Emulator orchestration (implemented)
+│   ├── testrom/    # Test ROM runner (implemented)
+│   ├── apu/        # Audio Processing Unit (planned)
+│   └── input/      # Joypad input handling (planned)
+└── testdata/       # Test ROMs
+    └── blargg/     # Blargg's CPU instruction tests
 ```
 
 ## Documentation
@@ -134,32 +153,43 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
 
 ## Implementation Guidance
 
-### Recommended Implementation Order
-1. **CPU & Memory** (docs/01-cpu.md, docs/02-memory.md)
-   - Implement CPU registers, flags, and basic instruction set
-   - Create memory bus and basic memory mapping
+### Implementation Status
 
-2. **Cartridge Loading** (docs/03-cartridges.md)
-   - Parse cartridge headers
-   - Implement ROM-only cartridges first
-   - Add MBC1 support (most common)
+#### Completed (Phases 1-3)
+1. **CPU & Memory** ✅ (docs/01-cpu.md, docs/02-memory.md)
+   - ✅ CPU registers, flags, and complete instruction set
+   - ✅ Memory bus and address space mapping
+   - ✅ Cycle-accurate timing
 
-3. **Graphics/PPU** (docs/04-graphics.md)
-   - Implement basic tile rendering
-   - Add background layer
-   - Implement PPU modes and timing
-   - Add sprites
+2. **Cartridge Loading** ✅ (docs/03-cartridges.md)
+   - ✅ Cartridge header parsing
+   - ✅ ROM-only cartridges
+   - ✅ MBC1 support (most common)
 
+3. **Graphics/PPU** ✅ (docs/04-graphics.md)
+   - ✅ Tile rendering (8×8 pixels, 2bpp)
+   - ✅ Background layer with scrolling (SCX/SCY)
+   - ✅ Window layer
+   - ✅ Sprite/object rendering (8×8 and 8×16)
+   - ✅ PPU modes and timing (H-Blank, V-Blank, OAM Scan, Drawing)
+   - ✅ VRAM/OAM access restrictions
+   - ✅ Palette system (BGP, OBP0, OBP1)
+   - ✅ Ebiten display integration
+
+#### Planned (Phases 4+)
 4. **Interrupts & Input** (docs/05-interrupts.md, docs/06-input.md)
-   - Implement interrupt system
-   - Add joypad input
-   - Wire up V-Blank interrupt
+   - ✅ V-Blank interrupt
+   - 🚧 STAT interrupts (LYC=LY implemented, others pending)
+   - ⏳ Timer interrupts
+   - ⏳ Serial interrupts
+   - ⏳ Joypad interrupts
+   - ⏳ Joypad input handling
 
 5. **Timers** (docs/07-timers.md)
-   - Implement DIV and timer registers
+   - ⏳ DIV and timer registers
 
 6. **Audio/APU** (docs/08-audio.md)
-   - Implement sound channels (can be done last)
+   - ⏳ Sound channels (can be done last)
 
 ### Code Organization
 - Use standard Go project layout

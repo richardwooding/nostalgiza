@@ -6,13 +6,26 @@ A Game Boy (DMG) emulator written in Go.
 
 NostalgiZA is a cycle-accurate Game Boy emulator targeting the original Game Boy (DMG - Dot Matrix Game) hardware. The goal is to provide accurate emulation of the Game Boy's CPU, graphics, audio, and input systems.
 
-## Features (Planned)
+## Features
 
-- [ ] Sharp SM83 CPU emulation
-- [ ] Picture Processing Unit (PPU) with tile-based rendering
+### Implemented
+- [x] Sharp SM83 CPU emulation (all opcodes, flags, timing)
+- [x] Memory management and bus
+- [x] Cartridge loading (ROM-only and MBC1)
+- [x] Picture Processing Unit (PPU) with tile-based rendering
+  - Background layer with scrolling
+  - Window layer
+  - Sprite/object rendering (8x8 and 8x16)
+  - PPU modes and timing (H-Blank, V-Blank, OAM Scan, Drawing)
+- [x] Graphics display (Ebiten integration)
+- [x] Test ROM support (Blargg's CPU instruction tests)
+
+### Planned
 - [ ] Audio Processing Unit (APU) with 4 sound channels
-- [ ] Memory Bank Controller (MBC) support
+- [ ] Additional MBC support (MBC2, MBC3, MBC5)
 - [ ] Joypad input
+- [ ] Interrupt handling (V-Blank implemented, STAT, Timer, Serial, Joypad pending)
+- [ ] Timer registers
 - [ ] Save state support
 - [ ] Debugger and disassembler
 
@@ -53,7 +66,7 @@ go build ./cmd/nostalgiza
 # Display cartridge information
 ./nostalgiza info <rom-file>
 
-# Run a Game Boy ROM (not yet implemented - requires Phase 3+)
+# Run a Game Boy ROM with graphics
 ./nostalgiza run <rom-file>
 
 # Run a test ROM and report results
@@ -65,6 +78,9 @@ go build ./cmd/nostalgiza
 ```bash
 # Show ROM information
 ./nostalgiza info game.gb
+
+# Run a Game Boy ROM (opens window with graphics)
+./nostalgiza run game.gb
 
 # Run a test ROM
 ./nostalgiza test testdata/blargg/cpu_instrs/01-special.gb

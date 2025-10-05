@@ -2,7 +2,20 @@ package memory
 
 import (
 	"testing"
+
+	"github.com/richardwooding/nostalgiza/internal/ppu"
 )
+
+// newBusWithPPU creates a memory bus with a PPU attached.
+// The PPU is set to H-Blank mode to allow VRAM/OAM access for testing.
+func newBusWithPPU() *Bus {
+	bus := NewBus()
+	p := ppu.New(nil)
+	// Force PPU into H-Blank mode (mode 0) so VRAM/OAM are accessible
+	p.SetModeForTesting(0) // Mode 0 = H-Blank
+	bus.SetPPU(p)
+	return bus
+}
 
 func TestNewBus(t *testing.T) {
 	bus := NewBus()
@@ -94,7 +107,7 @@ func TestEchoRAM(t *testing.T) {
 }
 
 func TestVRAMAccess(t *testing.T) {
-	bus := NewBus()
+	bus := newBusWithPPU()
 
 	// Test VRAM (8000-9FFF)
 	bus.Write(0x8000, 0x12)
@@ -111,7 +124,7 @@ func TestVRAMAccess(t *testing.T) {
 }
 
 func TestOAMAccess(t *testing.T) {
-	bus := NewBus()
+	bus := newBusWithPPU()
 
 	// Test OAM (FE00-FE9F)
 	bus.Write(0xFE00, 0x56)
@@ -224,7 +237,7 @@ func TestNotUsableMemory(t *testing.T) {
 }
 
 func TestIORegisters(t *testing.T) {
-	bus := NewBus()
+	bus := newBusWithPPU()
 
 	// Test basic I/O register read/write
 	bus.Write(0xFF40, 0x91) // LCDC
@@ -306,7 +319,7 @@ func TestLoadROMSizeValidation(t *testing.T) {
 }
 
 func TestMemoryMap(t *testing.T) {
-	bus := NewBus()
+	bus := newBusWithPPU()
 
 	// Test that each memory region is distinct
 	testAddresses := []struct {
@@ -343,7 +356,7 @@ func TestMemoryMap(t *testing.T) {
 }
 
 func TestMemoryBoundaries(t *testing.T) {
-	bus := NewBus()
+	bus := newBusWithPPU()
 
 	tests := []struct {
 		name     string
