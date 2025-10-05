@@ -34,8 +34,8 @@ type APU struct {
 	panning uint8 // Channel panning bits
 
 	// Audio output
-	sampleBuffer       []float32 // Stereo samples (L, R, L, R, ...)
-	sampleAccumulator  float64   // Fractional samples accumulated between Update() calls
+	sampleBuffer      []float32 // Stereo samples (L, R, L, R, ...)
+	sampleAccumulator float64   // Fractional samples accumulated between Update() calls
 }
 
 // New creates a new APU instance.
@@ -401,7 +401,6 @@ func (a *APU) reset() {
 
 // GetSampleBuffer returns the current audio sample buffer and clears it.
 func (a *APU) GetSampleBuffer() []float32 {
-
 	// Warn if buffer is growing too large (indicates Update() isn't being called regularly)
 	const maxBufferSize = 48000 * 2 // 1 second of stereo samples at 48kHz
 	if len(a.sampleBuffer) > maxBufferSize {

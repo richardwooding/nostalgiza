@@ -1,7 +1,7 @@
 package main
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
@@ -14,7 +14,7 @@ const (
 
 	// Audio buffer size in samples (not bytes).
 	// Larger buffer = more latency but less chance of underrun.
-	// ~0.1 seconds of audio buffering (48000 samples/sec * 0.1 sec * 2 channels)
+	// ~0.1 seconds of audio buffering (48000 samples/sec * 0.1 sec * 2 channels).
 	audioBufferSize = 9600
 )
 
@@ -136,7 +136,7 @@ func (ap *AudioPlayer) Read(buf []byte) (int, error) {
 		}
 
 		// Apply triangular dithering to reduce quantization noise
-		dither := (rand.Float32() + rand.Float32() - 1.0) / 32768.0
+		dither := (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
 		leftInt16 := int16((left + dither) * 32767.0)
 		buf[i*4] = byte(leftInt16)
 		buf[i*4+1] = byte(leftInt16 >> 8)
@@ -159,7 +159,7 @@ func (ap *AudioPlayer) Read(buf []byte) (int, error) {
 		}
 
 		// Apply triangular dithering to reduce quantization noise
-		dither = (rand.Float32() + rand.Float32() - 1.0) / 32768.0
+		dither = (rand.Float32() + rand.Float32() - 1.0) / 32768.0 //nolint:gosec // Weak random is fine for audio dithering
 		rightInt16 := int16((right + dither) * 32767.0)
 		buf[i*4+2] = byte(rightInt16)
 		buf[i*4+3] = byte(rightInt16 >> 8)
