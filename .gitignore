@@ -11,6 +11,10 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Compiled binaries
+/nostalgiza
+/cmd/nostalgiza/nostalgiza
+
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*

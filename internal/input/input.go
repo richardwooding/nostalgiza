@@ -87,37 +87,49 @@ func (j *Joypad) Write(value uint8) {
 	j.selectDirection = (value & 0x10) != 0
 }
 
-// PressButton sets a button as pressed and requests joypad interrupt.
+// PressButton sets a button as pressed and requests joypad interrupt on state change.
+// Only triggers interrupt when button transitions from released to pressed.
 func (j *Joypad) PressButton(button string) {
+	// Check current state before update
+	wasPressed := false
+
 	switch button {
 	case "A":
+		wasPressed = j.buttonA
 		j.buttonA = true
 	case "B":
+		wasPressed = j.buttonB
 		j.buttonB = true
 	case "Start":
+		wasPressed = j.buttonStart
 		j.buttonStart = true
 	case "Select":
+		wasPressed = j.buttonSelect
 		j.buttonSelect = true
 	case "Up":
+		wasPressed = j.buttonUp
 		if !j.buttonDown { // Block opposite directions
 			j.buttonUp = true
 		}
 	case "Down":
+		wasPressed = j.buttonDown
 		if !j.buttonUp { // Block opposite directions
 			j.buttonDown = true
 		}
 	case "Left":
+		wasPressed = j.buttonLeft
 		if !j.buttonRight { // Block opposite directions
 			j.buttonLeft = true
 		}
 	case "Right":
+		wasPressed = j.buttonRight
 		if !j.buttonLeft { // Block opposite directions
 			j.buttonRight = true
 		}
 	}
 
-	// Request joypad interrupt (bit 4)
-	if j.requestInterrupt != nil {
+	// Only request interrupt on state transition (released -> pressed)
+	if !wasPressed && j.requestInterrupt != nil {
 		j.requestInterrupt(4)
 	}
 }

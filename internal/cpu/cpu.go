@@ -1,6 +1,24 @@
 // Package cpu implements the Sharp SM83 CPU emulation for the Game Boy.
 package cpu
 
+// Interrupt bit positions in IE/IF registers.
+const (
+	InterruptVBlank uint8 = 0 // V-Blank interrupt (highest priority)
+	InterruptSTAT   uint8 = 1 // LCD STAT interrupt
+	InterruptTimer  uint8 = 2 // Timer interrupt
+	InterruptSerial uint8 = 3 // Serial interrupt
+	InterruptJoypad uint8 = 4 // Joypad interrupt (lowest priority)
+)
+
+// Interrupt handler addresses.
+var interruptHandlers = [5]uint16{
+	0x0040, // V-Blank
+	0x0048, // LCD STAT
+	0x0050, // Timer
+	0x0058, // Serial
+	0x0060, // Joypad
+}
+
 // Memory interface for CPU to access memory bus.
 type Memory interface {
 	Read(addr uint16) uint8
@@ -15,7 +33,9 @@ type CPU struct {
 	// Interrupt master enable flag
 	IME bool
 
-	// Pending IME for EI instruction (delayed enable)
+	// Pending IME for EI instruction (delayed enable).
+	// The EI instruction enables interrupts AFTER the next instruction executes.
+	// This flag tracks that we need to set IME=true after the current instruction completes.
 	pendingIME bool
 
 	// Halt and stop states
@@ -53,8 +73,9 @@ func (c *CPU) Step() uint8 {
 		ifReg := c.Memory.Read(0xFF0F)
 		if (ie & ifReg & 0x1F) != 0 {
 			c.halted = false
-			// HALT bug: if IME=0, next instruction's first byte executes twice
-			// For now, we'll just exit HALT normally
+			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after HALT
+			// This causes the first byte of the next instruction to execute twice
+			// TODO: Implement HALT bug for hardware accuracy (low priority)
 		}
 		// Consume 1 M-cycle while halted
 		c.Cycles += 4
@@ -162,8 +183,7 @@ func (c *CPU) serviceInterrupt(bit uint8) {
 	c.push(c.Registers.PC)
 
 	// Jump to interrupt handler address
-	handlers := []uint16{0x40, 0x48, 0x50, 0x58, 0x60}
-	c.Registers.PC = handlers[bit]
+	c.Registers.PC = interruptHandlers[bit]
 }
 
 // Helper methods for arithmetic operations

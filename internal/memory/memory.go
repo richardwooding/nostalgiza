@@ -75,8 +75,9 @@ func (b *Bus) SetJoypad(joypad Joypad) {
 
 // Read reads a byte from the memory bus.
 func (b *Bus) Read(addr uint16) uint8 {
-	// During DMA transfer, only HRAM is accessible to CPU
-	if b.dmaActive && addr < 0xFF80 {
+	// During DMA transfer, only HRAM (0xFF80-0xFFFE) is accessible to CPU
+	// All other reads return 0xFF (including OAM)
+	if b.dmaActive && (addr < 0xFF80 || addr == 0xFFFF) {
 		return 0xFF
 	}
 
@@ -260,9 +261,13 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 		}
 	case 0xFF46: // DMA - DMA transfer
 		// Initiate DMA transfer
-		b.dmaActive = true
-		b.dmaSource = uint16(value) << 8 // Source address is XX00
-		b.dmaCycles = 160                // DMA takes 160 M-cycles
+		// Valid DMA source addresses are 0x00-0xF1 (0x0000-0xF100)
+		// Addresses above 0xF1 would attempt to copy from restricted regions
+		if value <= 0xF1 {
+			b.dmaActive = true
+			b.dmaSource = uint16(value) << 8 // Source address is XX00
+			b.dmaCycles = 160                // DMA takes 160 M-cycles
+		}
 		b.io[offset] = value
 	default:
 		b.io[offset] = value
@@ -310,7 +315,8 @@ func (b *Bus) Reset() {
 }
 
 // StepDMA advances the DMA transfer by one M-cycle.
-// Returns true if DMA is still active.
+// Returns true if DMA is still active, false if transfer is complete or inactive.
+// Should be called once per M-cycle when DMA is active.
 func (b *Bus) StepDMA() bool {
 	if !b.dmaActive {
 		return false
