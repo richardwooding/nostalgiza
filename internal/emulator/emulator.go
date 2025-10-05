@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/richardwooding/nostalgiza/internal/apu"
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
 	"github.com/richardwooding/nostalgiza/internal/cpu"
 	"github.com/richardwooding/nostalgiza/internal/input"
@@ -47,6 +48,7 @@ type Emulator struct {
 	PPU    *ppu.PPU
 	Joypad *input.Joypad
 	Timer  *timer.Timer
+	APU    *apu.APU
 	Cart   cartridge.Cartridge // nolint:unused // Reserved for future save state/MBC features
 
 	// Serial output buffer for test ROMs
@@ -81,6 +83,9 @@ func New(romData []byte) (*Emulator, error) {
 		e.requestInterrupt(cpu.InterruptTimer)
 	})
 
+	// Create APU
+	e.APU = apu.New()
+
 	// Create memory bus and load ROM
 	mem := memory.NewBus()
 	if err := mem.LoadROM(romData); err != nil {
@@ -89,6 +94,7 @@ func New(romData []byte) (*Emulator, error) {
 	mem.SetPPU(e.PPU)
 	mem.SetJoypad(e.Joypad)
 	mem.SetTimer(e.Timer)
+	mem.SetAPU(e.APU)
 	e.Memory = mem
 
 	// Create CPU
@@ -113,6 +119,9 @@ func (e *Emulator) Step() uint8 {
 
 	// Advance timer by the same number of cycles
 	e.Timer.Update(uint16(cycles))
+
+	// Advance APU by the same number of cycles
+	e.APU.Update(uint16(cycles))
 
 	// Advance DMA transfer if active (DMA operates in M-cycles)
 	// Each CPU cycle is 4 clock cycles, so cycles/4 = M-cycles

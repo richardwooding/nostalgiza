@@ -69,6 +69,12 @@ func (c *InfoCmd) Run() error {
 type RunCmd struct {
 	ROM   string `arg:"" type:"existingfile" help:"Path to ROM file."`
 	Scale int    `help:"Display scale factor (1-10)." default:"3"`
+
+	// Audio filter flags for debugging audio quality issues
+	NoLowPass  bool `help:"Disable low-pass filter (anti-aliasing)."`
+	NoHighPass bool `help:"Disable high-pass filter (DC offset removal)."`
+	NoSoftClip bool `help:"Disable soft clipping (use hard clipping instead)."`
+	NoDither   bool `help:"Disable triangular dithering."`
 }
 
 // Run executes the run command.
@@ -90,8 +96,13 @@ func (c *RunCmd) Run() error {
 		return fmt.Errorf("failed to create emulator: %w", err)
 	}
 
-	// Create display
-	display := NewDisplay(emu)
+	// Create display with audio filter options
+	display := NewDisplay(emu, AudioOptions{
+		EnableLowPass:  !c.NoLowPass,
+		EnableHighPass: !c.NoHighPass,
+		EnableSoftClip: !c.NoSoftClip,
+		EnableDither:   !c.NoDither,
+	})
 
 	// Configure Ebiten window
 	ebiten.SetWindowTitle("NostalgiZA - Game Boy Emulator")

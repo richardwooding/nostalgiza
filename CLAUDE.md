@@ -143,7 +143,7 @@ nostalgiza/
 │   ├── testrom/    # Test ROM runner (implemented)
 │   ├── timer/      # Timer system (implemented)
 │   ├── input/      # Joypad input handling (implemented)
-│   └── apu/        # Audio Processing Unit (planned)
+│   └── apu/        # Audio Processing Unit (implemented)
 └── testdata/       # Test ROMs
     └── blargg/     # Blargg's CPU instruction tests
 ```
@@ -201,9 +201,16 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
    - ✅ Falling edge detection for timer increments
    - ✅ DIV/TAC write side effects
 
-#### Planned (Phase 6+)
-6. **Audio/APU** (docs/08-audio.md)
-   - ⏳ Sound channels (can be done last)
+6. **Audio/APU** ✅ (docs/08-audio.md)
+   - ✅ Channel 1: Pulse wave with frequency sweep
+   - ✅ Channel 2: Pulse wave
+   - ✅ Channel 3: Programmable wave pattern (32 4-bit samples)
+   - ✅ Channel 4: Noise (LFSR with 15-bit and 7-bit modes)
+   - ✅ Frame sequencer (512 Hz) for length/sweep/envelope
+   - ✅ Stereo output with channel panning (NR51)
+   - ✅ Master volume control (NR50)
+   - ✅ Sample generation and mixing
+   - ✅ Ebiten audio integration (48kHz output)
 
 ### Code Organization
 - Use standard Go project layout

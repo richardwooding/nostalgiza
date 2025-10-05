@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/richardwooding/nostalgiza/internal/apu"
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
 	"github.com/richardwooding/nostalgiza/internal/timer"
 )
@@ -38,6 +39,9 @@ type Bus struct {
 
 	// Timer for DIV, TIMA, TMA, TAC registers
 	timer *timer.Timer
+
+	// APU for audio registers
+	apu *apu.APU
 
 	// Work RAM (8 KiB)
 	wram [0x2000]uint8 // C000-DFFF: Work RAM
@@ -80,6 +84,11 @@ func (b *Bus) SetJoypad(joypad Joypad) {
 // SetTimer sets the timer for the memory bus.
 func (b *Bus) SetTimer(t *timer.Timer) {
 	b.timer = t
+}
+
+// SetAPU sets the APU for the memory bus.
+func (b *Bus) SetAPU(a *apu.APU) {
+	b.apu = a
 }
 
 // Read reads a byte from the memory bus.
@@ -232,6 +241,21 @@ func (b *Bus) readIO(addr uint16) uint8 {
 		return b.io[offset]
 	case 0xFF0F: // IF - Interrupt flags
 		return b.io[offset]
+	case 0xFF10, 0xFF11, 0xFF12, 0xFF13, 0xFF14, // Audio channel 1
+		0xFF16, 0xFF17, 0xFF18, 0xFF19, // Audio channel 2
+		0xFF1A, 0xFF1B, 0xFF1C, 0xFF1D, 0xFF1E, // Audio channel 3
+		0xFF20, 0xFF21, 0xFF22, 0xFF23, // Audio channel 4
+		0xFF24, 0xFF25, 0xFF26: // Audio master control
+		if b.apu != nil {
+			return b.apu.Read(addr)
+		}
+		return b.io[offset]
+	case 0xFF30, 0xFF31, 0xFF32, 0xFF33, 0xFF34, 0xFF35, 0xFF36, 0xFF37,
+		0xFF38, 0xFF39, 0xFF3A, 0xFF3B, 0xFF3C, 0xFF3D, 0xFF3E, 0xFF3F: // Wave RAM
+		if b.apu != nil {
+			return b.apu.Read(addr)
+		}
+		return b.io[offset-0x30]
 	case 0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B:
 		// PPU registers (0xFF40-0xFF4B except 0xFF46)
 		if b.ppu != nil {
@@ -268,6 +292,23 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 			} else {
 				b.io[offset] = value
 			}
+		}
+	case 0xFF10, 0xFF11, 0xFF12, 0xFF13, 0xFF14, // Audio channel 1
+		0xFF16, 0xFF17, 0xFF18, 0xFF19, // Audio channel 2
+		0xFF1A, 0xFF1B, 0xFF1C, 0xFF1D, 0xFF1E, // Audio channel 3
+		0xFF20, 0xFF21, 0xFF22, 0xFF23, // Audio channel 4
+		0xFF24, 0xFF25, 0xFF26: // Audio master control
+		if b.apu != nil {
+			b.apu.Write(addr, value)
+		} else {
+			b.io[offset] = value
+		}
+	case 0xFF30, 0xFF31, 0xFF32, 0xFF33, 0xFF34, 0xFF35, 0xFF36, 0xFF37,
+		0xFF38, 0xFF39, 0xFF3A, 0xFF3B, 0xFF3C, 0xFF3D, 0xFF3E, 0xFF3F: // Wave RAM
+		if b.apu != nil {
+			b.apu.Write(addr, value)
+		} else {
+			b.io[offset-0x30] = value
 		}
 	case 0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B:
 		// PPU registers (0xFF40-0xFF4B except 0xFF46)
