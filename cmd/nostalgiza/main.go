@@ -94,6 +94,7 @@ func (c *RunCmd) Run() error {
 	ebiten.SetWindowTitle("NostalgiZA - Game Boy Emulator")
 	ebiten.SetWindowSize(160*c.Scale, 144*c.Scale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetTPS(60) // Set to 60 ticks per second (matching Game Boy ~59.73 Hz)
 
 	// Run the emulator
 	if err := ebiten.RunGame(display); err != nil {
