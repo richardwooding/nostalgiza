@@ -219,11 +219,11 @@ func TestGetROMSizeBytes(t *testing.T) {
 		romSize byte
 		want    int
 	}{
-		{0x00, 32768},    // 32 KiB
-		{0x01, 65536},    // 64 KiB
-		{0x02, 131072},   // 128 KiB
-		{0x05, 1048576},  // 1 MiB
-		{0x08, 8388608},  // 8 MiB
+		{0x00, 32768},   // 32 KiB
+		{0x01, 65536},   // 64 KiB
+		{0x02, 131072},  // 128 KiB
+		{0x05, 1048576}, // 1 MiB
+		{0x08, 8388608}, // 8 MiB
 	}
 
 	for _, tt := range tests {

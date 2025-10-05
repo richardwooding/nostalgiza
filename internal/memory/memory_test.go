@@ -462,7 +462,6 @@ func TestEchoRAMMirroring(t *testing.T) {
 	}
 }
 
-
 // setupTestROMHeader sets up a minimal valid ROM header for testing.
 func setupTestROMHeader(rom []byte) {
 	// Title

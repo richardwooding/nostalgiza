@@ -6,6 +6,8 @@ import (
 
 // setupMBC1Header sets up a minimal header and recalculates checksum.
 // Call this after modifying any header fields (like ROM size).
+//
+//nolint:unparam // cartType parameter kept for potential future test variations
 func setupMBC1Header(rom []byte, cartType, ramSize, romSize byte) {
 	setupMinimalHeader(rom, cartType, ramSize)
 	rom[0x0148] = romSize

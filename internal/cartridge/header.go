@@ -76,38 +76,40 @@ type Header struct {
 }
 
 // CartridgeType represents the type of cartridge and MBC.
+//
+//nolint:revive // CartridgeType is intentionally explicit for clarity
 type CartridgeType byte
 
 // Cartridge types as defined in the header at 0x0147.
 const (
-	TypeROMOnly                CartridgeType = 0x00
-	TypeMBC1                   CartridgeType = 0x01
-	TypeMBC1RAM                CartridgeType = 0x02
-	TypeMBC1RAMBattery         CartridgeType = 0x03
-	TypeMBC2                   CartridgeType = 0x05
-	TypeMBC2Battery            CartridgeType = 0x06
-	TypeROMRAM                 CartridgeType = 0x08
-	TypeROMRAMBattery          CartridgeType = 0x09
-	TypeMMM01                  CartridgeType = 0x0B
-	TypeMMM01RAM               CartridgeType = 0x0C
-	TypeMMM01RAMBattery        CartridgeType = 0x0D
-	TypeMBC3TimerBattery       CartridgeType = 0x0F
-	TypeMBC3TimerRAMBattery    CartridgeType = 0x10
-	TypeMBC3                   CartridgeType = 0x11
-	TypeMBC3RAM                CartridgeType = 0x12
-	TypeMBC3RAMBattery         CartridgeType = 0x13
-	TypeMBC5                   CartridgeType = 0x19
-	TypeMBC5RAM                CartridgeType = 0x1A
-	TypeMBC5RAMBattery         CartridgeType = 0x1B
-	TypeMBC5Rumble             CartridgeType = 0x1C
-	TypeMBC5RumbleRAM          CartridgeType = 0x1D
-	TypeMBC5RumbleRAMBattery   CartridgeType = 0x1E
-	TypeMBC6                   CartridgeType = 0x20
+	TypeROMOnly                    CartridgeType = 0x00
+	TypeMBC1                       CartridgeType = 0x01
+	TypeMBC1RAM                    CartridgeType = 0x02
+	TypeMBC1RAMBattery             CartridgeType = 0x03
+	TypeMBC2                       CartridgeType = 0x05
+	TypeMBC2Battery                CartridgeType = 0x06
+	TypeROMRAM                     CartridgeType = 0x08
+	TypeROMRAMBattery              CartridgeType = 0x09
+	TypeMMM01                      CartridgeType = 0x0B
+	TypeMMM01RAM                   CartridgeType = 0x0C
+	TypeMMM01RAMBattery            CartridgeType = 0x0D
+	TypeMBC3TimerBattery           CartridgeType = 0x0F
+	TypeMBC3TimerRAMBattery        CartridgeType = 0x10
+	TypeMBC3                       CartridgeType = 0x11
+	TypeMBC3RAM                    CartridgeType = 0x12
+	TypeMBC3RAMBattery             CartridgeType = 0x13
+	TypeMBC5                       CartridgeType = 0x19
+	TypeMBC5RAM                    CartridgeType = 0x1A
+	TypeMBC5RAMBattery             CartridgeType = 0x1B
+	TypeMBC5Rumble                 CartridgeType = 0x1C
+	TypeMBC5RumbleRAM              CartridgeType = 0x1D
+	TypeMBC5RumbleRAMBattery       CartridgeType = 0x1E
+	TypeMBC6                       CartridgeType = 0x20
 	TypeMBC7SensorRumbleRAMBattery CartridgeType = 0x22
-	TypePocketCamera           CartridgeType = 0xFC
-	TypeBandaiTAMA5            CartridgeType = 0xFD
-	TypeHuC3                   CartridgeType = 0xFE
-	TypeHuC1RAMBattery         CartridgeType = 0xFF
+	TypePocketCamera               CartridgeType = 0xFC
+	TypeBandaiTAMA5                CartridgeType = 0xFD
+	TypeHuC3                       CartridgeType = 0xFE
+	TypeHuC1RAMBattery             CartridgeType = 0xFF
 )
 
 // String returns a human-readable name for the cartridge type.
@@ -335,7 +337,7 @@ func ParseHeader(rom []byte) (*Header, error) {
 
 // VerifyHeaderChecksum verifies the header checksum.
 // The checksum is calculated over bytes 0x0134-0x014C.
-// Formula: checksum = 0; for each byte: checksum = checksum - byte - 1
+// Formula: checksum = 0; for each byte: checksum = checksum - byte - 1.
 func (h *Header) VerifyHeaderChecksum(rom []byte) bool {
 	checksum := byte(0)
 	for addr := 0x0134; addr <= 0x014C; addr++ {

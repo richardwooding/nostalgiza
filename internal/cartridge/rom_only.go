@@ -9,6 +9,8 @@ type ROMOnly struct {
 }
 
 // newROMOnly creates a new ROM-only cartridge.
+//
+//nolint:unparam // Error return is for future expansion and interface consistency
 func newROMOnly(rom []byte, header *Header) (*ROMOnly, error) {
 	cart := &ROMOnly{
 		header: header,

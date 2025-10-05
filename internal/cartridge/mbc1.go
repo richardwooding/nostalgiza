@@ -12,16 +12,16 @@ package cartridge
 // - 0x0000-0x1FFF: RAM Enable (write 0x0A to enable, anything else disables)
 // - 0x2000-0x3FFF: ROM Bank Number (lower 5 bits)
 // - 0x4000-0x5FFF: RAM Bank Number / ROM Bank Number (upper 2 bits)
-// - 0x6000-0x7FFF: Banking Mode Select (0 = simple ROM, 1 = advanced RAM/ROM)
+// - 0x6000-0x7FFF: Banking Mode Select (0 = simple ROM, 1 = advanced RAM/ROM).
 type MBC1 struct {
 	header *Header
 	rom    []byte
 	ram    []byte
 
 	// Banking control
-	ramEnabled bool   // RAM enable flag (0x0000-0x1FFF)
-	romBank    uint8  // ROM bank number (0x2000-0x3FFF), 5 bits
-	ramBank    uint8  // RAM bank number (0x4000-0x5FFF), 2 bits
+	ramEnabled  bool  // RAM enable flag (0x0000-0x1FFF)
+	romBank     uint8 // ROM bank number (0x2000-0x3FFF), 5 bits
+	ramBank     uint8 // RAM bank number (0x4000-0x5FFF), 2 bits
 	bankingMode uint8 // Banking mode (0x6000-0x7FFF): 0 = simple, 1 = advanced
 
 	// Calculated values
@@ -30,6 +30,8 @@ type MBC1 struct {
 }
 
 // newMBC1 creates a new MBC1 cartridge.
+//
+//nolint:unparam // Error return is for future expansion and interface consistency
 func newMBC1(rom []byte, header *Header) (*MBC1, error) {
 	cart := &MBC1{
 		header:      header,
@@ -67,7 +69,7 @@ func (c *MBC1) Read(addr uint16) uint8 {
 
 		// Ensure bank is within bounds
 		if bankNumber >= c.numROMBanks {
-			bankNumber = bankNumber % c.numROMBanks
+			bankNumber %= c.numROMBanks
 		}
 
 		offset := bankNumber*0x4000 + int(addr)
@@ -89,7 +91,7 @@ func (c *MBC1) Read(addr uint16) uint8 {
 
 		// Wrap to available ROM banks
 		if bankNumber >= c.numROMBanks {
-			bankNumber = bankNumber % c.numROMBanks
+			bankNumber %= c.numROMBanks
 		}
 
 		offset := bankNumber*0x4000 + int(addr-0x4000)
@@ -110,7 +112,7 @@ func (c *MBC1) Read(addr uint16) uint8 {
 		if c.bankingMode == 1 && c.numRAMBanks > 1 {
 			bankNumber = int(c.ramBank)
 			if bankNumber >= c.numRAMBanks {
-				bankNumber = bankNumber % c.numRAMBanks
+				bankNumber %= c.numRAMBanks
 			}
 		}
 
@@ -165,7 +167,7 @@ func (c *MBC1) Write(addr uint16, value uint8) {
 		if c.bankingMode == 1 && c.numRAMBanks > 1 {
 			bankNumber = int(c.ramBank)
 			if bankNumber >= c.numRAMBanks {
-				bankNumber = bankNumber % c.numRAMBanks
+				bankNumber %= c.numRAMBanks
 			}
 		}
 

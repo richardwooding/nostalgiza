@@ -240,7 +240,7 @@ var ErrROMLoadFailed = errors.New("ROM loading failed")
 func (b *Bus) LoadROM(rom []byte) error {
 	cart, err := cartridge.New(rom)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrROMLoadFailed, err)
+		return fmt.Errorf("%w: %w", ErrROMLoadFailed, err)
 	}
 
 	b.cartridge = cart
