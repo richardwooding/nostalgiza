@@ -17,15 +17,16 @@ NostalgiZA is a cycle-accurate Game Boy emulator targeting the original Game Boy
   - Window layer
   - Sprite/object rendering (8x8 and 8x16)
   - PPU modes and timing (H-Blank, V-Blank, OAM Scan, Drawing)
+  - DMA transfer for OAM
 - [x] Graphics display (Ebiten integration)
+- [x] Interrupt system (V-Blank, STAT, Timer, Joypad)
+- [x] Joypad input (keyboard mapping)
+- [x] Timer system (DIV, TIMA, TMA, TAC registers)
 - [x] Test ROM support (Blargg's CPU instruction tests)
 
 ### Planned
 - [ ] Audio Processing Unit (APU) with 4 sound channels
 - [ ] Additional MBC support (MBC2, MBC3, MBC5)
-- [ ] Joypad input
-- [ ] Interrupt handling (V-Blank implemented, STAT, Timer, Serial, Joypad pending)
-- [ ] Timer registers
 - [ ] Save state support
 - [ ] Debugger and disassembler
 

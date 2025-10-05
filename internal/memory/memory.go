@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
+	"github.com/richardwooding/nostalgiza/internal/timer"
 )
 
 // PPU is an interface for the Picture Processing Unit.
@@ -34,6 +35,9 @@ type Bus struct {
 
 	// Joypad for input handling
 	joypad Joypad
+
+	// Timer for DIV, TIMA, TMA, TAC registers
+	timer *timer.Timer
 
 	// Work RAM (8 KiB)
 	wram [0x2000]uint8 // C000-DFFF: Work RAM
@@ -71,6 +75,11 @@ func (b *Bus) SetPPU(ppu PPU) {
 // SetJoypad sets the joypad for the memory bus.
 func (b *Bus) SetJoypad(joypad Joypad) {
 	b.joypad = joypad
+}
+
+// SetTimer sets the timer for the memory bus.
+func (b *Bus) SetTimer(t *timer.Timer) {
+	b.timer = t
 }
 
 // Read reads a byte from the memory bus.
@@ -216,13 +225,10 @@ func (b *Bus) readIO(addr uint16) uint8 {
 			return b.joypad.Read()
 		}
 		return 0xFF // No input pressed
-	case 0xFF04: // DIV - Divider register
-		return b.io[offset]
-	case 0xFF05: // TIMA - Timer counter
-		return b.io[offset]
-	case 0xFF06: // TMA - Timer modulo
-		return b.io[offset]
-	case 0xFF07: // TAC - Timer control
+	case 0xFF04, 0xFF05, 0xFF06, 0xFF07: // Timer registers
+		if b.timer != nil {
+			return b.timer.Read(addr)
+		}
 		return b.io[offset]
 	case 0xFF0F: // IF - Interrupt flags
 		return b.io[offset]
@@ -252,8 +258,17 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 		if b.joypad != nil {
 			b.joypad.Write(value)
 		}
-	case 0xFF04: // DIV - Divider register (writing resets to 0)
-		b.io[offset] = 0
+	case 0xFF04, 0xFF05, 0xFF06, 0xFF07: // Timer registers
+		if b.timer != nil {
+			b.timer.Write(addr, value)
+		} else {
+			// Fallback for DIV reset behavior
+			if addr == 0xFF04 {
+				b.io[offset] = 0
+			} else {
+				b.io[offset] = value
+			}
+		}
 	case 0xFF40, 0xFF41, 0xFF42, 0xFF43, 0xFF44, 0xFF45, 0xFF47, 0xFF48, 0xFF49, 0xFF4A, 0xFF4B:
 		// PPU registers (0xFF40-0xFF4B except 0xFF46)
 		if b.ppu != nil {
