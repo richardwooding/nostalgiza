@@ -83,13 +83,14 @@ func (e *Emulator) RunCycles(cycles uint64) {
 // This is useful for test ROMs that output results via serial port.
 // Returns the serial output and any error.
 func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
-	startTime := time.Now()
+	absoluteDeadline := time.Now().Add(timeout)
 	lastOutputLen := 0
+	lastOutputTime := time.Now()
 
 	// Run until we get stable output or timeout
 	for {
-		// Check timeout
-		if time.Since(startTime) > timeout {
+		// Check absolute deadline to prevent infinite loops
+		if time.Now().After(absoluteDeadline) {
 			if len(e.serialOutput) > 0 {
 				return string(e.serialOutput), nil
 			}
@@ -102,7 +103,7 @@ func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
 		// Check if we got new output - only convert to string when data changes
 		if len(e.serialOutput) > lastOutputLen {
 			lastOutputLen = len(e.serialOutput)
-			startTime = time.Now() // Reset timeout on new output
+			lastOutputTime = time.Now()
 
 			// Check if output is complete (only when new data arrives)
 			// Blargg's test ROMs output "Passed" or "Failed" when complete
@@ -110,6 +111,12 @@ func (e *Emulator) RunUntilOutput(timeout time.Duration) (string, error) {
 			if strings.Contains(output, "Passed") || strings.Contains(output, "Failed") {
 				return output, nil
 			}
+		}
+
+		// Also check for stable output (no new data for a while)
+		// This handles ROMs that output continuously without completion markers
+		if len(e.serialOutput) > 0 && time.Since(lastOutputTime) > timeout/10 {
+			return string(e.serialOutput), nil
 		}
 	}
 }

@@ -15,7 +15,7 @@ func testROMPath(t *testing.T, relPath string) string {
 
 	// Skip in short mode
 	if testing.Short() {
-		t.Skip("Skipping test ROM test in short mode (use -short to skip)")
+		t.Skip("Skipping test ROM integration test in short mode")
 	}
 
 	path := filepath.Join("../../testdata/blargg", relPath)

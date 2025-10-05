@@ -253,31 +253,22 @@ func (b *Bus) GetCartridge() cartridge.Cartridge {
 }
 
 // Reset clears all RAM while keeping the cartridge loaded.
+// Note: Cartridge RAM is not cleared as it may be battery-backed.
 func (b *Bus) Reset() {
-	// Clear VRAM
-	for i := range b.vram {
-		b.vram[i] = 0
-	}
+	// Clear VRAM (using Go 1.25 clear() built-in)
+	clear(b.vram[:])
 
 	// Clear Work RAM
-	for i := range b.wram {
-		b.wram[i] = 0
-	}
+	clear(b.wram[:])
 
 	// Clear OAM
-	for i := range b.oam {
-		b.oam[i] = 0
-	}
+	clear(b.oam[:])
 
 	// Clear I/O registers
-	for i := range b.io {
-		b.io[i] = 0
-	}
+	clear(b.io[:])
 
 	// Clear High RAM
-	for i := range b.hram {
-		b.hram[i] = 0
-	}
+	clear(b.hram[:])
 
 	// Clear Interrupt Enable
 	b.ie = 0
