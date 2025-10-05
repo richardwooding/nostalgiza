@@ -1,6 +1,24 @@
 // Package cpu implements the Sharp SM83 CPU emulation for the Game Boy.
 package cpu
 
+// Interrupt bit positions in IE/IF registers.
+const (
+	InterruptVBlank uint8 = 0 // V-Blank interrupt (highest priority)
+	InterruptSTAT   uint8 = 1 // LCD STAT interrupt
+	InterruptTimer  uint8 = 2 // Timer interrupt
+	InterruptSerial uint8 = 3 // Serial interrupt
+	InterruptJoypad uint8 = 4 // Joypad interrupt (lowest priority)
+)
+
+// Interrupt handler addresses.
+var interruptHandlers = [5]uint16{
+	0x0040, // V-Blank
+	0x0048, // LCD STAT
+	0x0050, // Timer
+	0x0058, // Serial
+	0x0060, // Joypad
+}
+
 // Memory interface for CPU to access memory bus.
 type Memory interface {
 	Read(addr uint16) uint8
@@ -14,6 +32,11 @@ type CPU struct {
 
 	// Interrupt master enable flag
 	IME bool
+
+	// Pending IME for EI instruction (delayed enable).
+	// The EI instruction enables interrupts AFTER the next instruction executes.
+	// This flag tracks that we need to set IME=true after the current instruction completes.
+	pendingIME bool
 
 	// Halt and stop states
 	halted  bool
@@ -37,11 +60,25 @@ func New(mem Memory) *CPU {
 
 // Step executes one instruction and returns cycles taken.
 func (c *CPU) Step() uint8 {
+	// Check for interrupts before executing instruction
+	if interruptCycles := c.checkInterrupts(); interruptCycles > 0 {
+		c.Cycles += uint64(interruptCycles)
+		return interruptCycles
+	}
+
 	// Handle halt state
 	if c.halted {
-		// TODO: Check for interrupts (Phase 4)
-		// TODO: Implement HALT bug (when IME=0 and IE & IF != 0, PC doesn't increment after HALT)
-		// For now, just consume 1 M-cycle
+		// Check if interrupt pending (will exit HALT)
+		ie := c.Memory.Read(0xFFFF)
+		ifReg := c.Memory.Read(0xFF0F)
+		if (ie & ifReg & 0x1F) != 0 {
+			c.halted = false
+			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after HALT
+			// This causes the first byte of the next instruction to execute twice
+			// TODO: Implement HALT bug for hardware accuracy (low priority)
+		}
+		// Consume 1 M-cycle while halted
+		c.Cycles += 4
 		return 4
 	}
 
@@ -60,6 +97,12 @@ func (c *CPU) Step() uint8 {
 
 	// Update cycle counter
 	c.Cycles += uint64(cycles)
+
+	// Handle delayed IME from EI instruction
+	if c.pendingIME {
+		c.IME = true
+		c.pendingIME = false
+	}
 
 	return cycles
 }
@@ -94,6 +137,53 @@ func (c *CPU) pop() uint16 {
 	high := uint16(c.Memory.Read(c.Registers.SP + 1))
 	c.Registers.SP += 2
 	return high<<8 | low
+}
+
+// checkInterrupts checks for pending interrupts and services them if IME is enabled.
+// Returns the number of cycles consumed (20 if interrupt serviced, 0 otherwise).
+func (c *CPU) checkInterrupts() uint8 {
+	// Interrupts only serviced if IME is enabled
+	if !c.IME {
+		return 0
+	}
+
+	// Read IE and IF registers
+	ie := c.Memory.Read(0xFFFF)    // Interrupt Enable
+	ifReg := c.Memory.Read(0xFF0F) // Interrupt Flag
+
+	// Check for pending interrupts (IE & IF & 0x1F)
+	pending := ie & ifReg & 0x1F
+
+	if pending == 0 {
+		return 0
+	}
+
+	// Find highest priority interrupt (lowest bit number)
+	for bit := uint8(0); bit < 5; bit++ {
+		if pending&(1<<bit) != 0 {
+			c.serviceInterrupt(bit)
+			return 20 // Interrupt service takes 5 M-cycles = 20 clock cycles
+		}
+	}
+
+	return 0
+}
+
+// serviceInterrupt services an interrupt.
+func (c *CPU) serviceInterrupt(bit uint8) {
+	// Disable interrupts
+	c.IME = false
+	c.pendingIME = false
+
+	// Clear IF bit for this interrupt
+	ifReg := c.Memory.Read(0xFF0F)
+	c.Memory.Write(0xFF0F, ifReg&^(1<<bit))
+
+	// Push PC onto stack
+	c.push(c.Registers.PC)
+
+	// Jump to interrupt handler address
+	c.Registers.PC = interruptHandlers[bit]
 }
 
 // Helper methods for arithmetic operations

@@ -10,6 +10,7 @@ import (
 
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
 	"github.com/richardwooding/nostalgiza/internal/cpu"
+	"github.com/richardwooding/nostalgiza/internal/input"
 	"github.com/richardwooding/nostalgiza/internal/memory"
 	"github.com/richardwooding/nostalgiza/internal/ppu"
 )
@@ -43,6 +44,7 @@ type Emulator struct {
 	CPU    *cpu.CPU
 	Memory *memory.Bus
 	PPU    *ppu.PPU
+	Joypad *input.Joypad
 	Cart   cartridge.Cartridge // nolint:unused // Reserved for future save state/MBC features
 
 	// Serial output buffer for test ROMs
@@ -69,12 +71,16 @@ func New(romData []byte) (*Emulator, error) {
 	// Create PPU with interrupt callback
 	e.PPU = ppu.New(e.requestInterrupt)
 
+	// Create joypad with interrupt callback
+	e.Joypad = input.New(e.requestInterrupt)
+
 	// Create memory bus and load ROM
 	mem := memory.NewBus()
 	if err := mem.LoadROM(romData); err != nil {
 		return nil, fmt.Errorf("failed to load ROM into memory: %w", err)
 	}
 	mem.SetPPU(e.PPU)
+	mem.SetJoypad(e.Joypad)
 	e.Memory = mem
 
 	// Create CPU
@@ -96,6 +102,12 @@ func (e *Emulator) Step() uint8 {
 
 	// Advance PPU by the same number of cycles
 	e.PPU.Step(cycles)
+
+	// Advance DMA transfer if active (DMA operates in M-cycles)
+	// Each CPU cycle is 4 clock cycles, so cycles/4 = M-cycles
+	for i := uint8(0); i < cycles/4; i++ {
+		e.Memory.StepDMA()
+	}
 
 	return cycles
 }
