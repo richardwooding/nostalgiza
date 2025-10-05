@@ -141,8 +141,9 @@ nostalgiza/
 │   ├── cartridge/  # Cartridge loading and MBC1 (implemented)
 │   ├── emulator/   # Emulator orchestration (implemented)
 │   ├── testrom/    # Test ROM runner (implemented)
-│   ├── apu/        # Audio Processing Unit (planned)
-│   └── input/      # Joypad input handling (planned)
+│   ├── timer/      # Timer system (implemented)
+│   ├── input/      # Joypad input handling (implemented)
+│   └── apu/        # Audio Processing Unit (planned)
 └── testdata/       # Test ROMs
     └── blargg/     # Blargg's CPU instruction tests
 ```
@@ -193,11 +194,14 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
    - ✅ Keyboard input integration (Ebiten: Arrow keys, Z/X, Enter, Shift)
    - 🚧 STAT interrupts (LYC=LY implemented, H-Blank/V-Blank/OAM pending)
 
-#### Planned (Phases 5+)
-5. **Timers** (docs/07-timers.md)
-   - ⏳ DIV and timer registers
-   - ⏳ Timer interrupts
+5. **Timers** ✅ (docs/07-timers.md)
+   - ✅ DIV register (increments at 16384 Hz)
+   - ✅ TIMA/TMA/TAC registers (programmable timer)
+   - ✅ Timer interrupts on overflow
+   - ✅ Falling edge detection for timer increments
+   - ✅ DIV/TAC write side effects
 
+#### Planned (Phase 6+)
 6. **Audio/APU** (docs/08-audio.md)
    - ⏳ Sound channels (can be done last)
 
