@@ -97,58 +97,71 @@ func (a *APU) clockFrameSequencer() {
 }
 
 // generateSamples generates audio samples for the given number of cycles.
-func (a *APU) generateSamples(_ uint16) {
-	// Get sample from each channel (0.0 to 1.0)
-	sample1 := a.channel1.GetSample()
-	sample2 := a.channel2.GetSample()
-	sample3 := a.channel3.GetSample()
-	sample4 := a.channel4.GetSample()
+// The Game Boy CPU runs at 4.194304 MHz, but we output at 48 kHz.
+// We need to generate the correct number of samples based on elapsed cycles.
+func (a *APU) generateSamples(cycles uint16) {
+	// Calculate how many samples we need for this many CPU cycles
+	// Sample rate: 48000 Hz
+	// CPU clock: 4194304 Hz
+	// Samples needed = cycles * 48000 / 4194304
+	const sampleRate = 48000.0
+	const cpuClock = 4194304.0
+	samplesNeeded := int(float64(cycles) * sampleRate / cpuClock)
 
-	// Mix channels for left and right outputs
-	var left, right float32
+	// Generate the required number of samples
+	for i := 0; i < samplesNeeded; i++ {
+		// Get sample from each channel (0.0 to 1.0)
+		sample1 := a.channel1.GetSample()
+		sample2 := a.channel2.GetSample()
+		sample3 := a.channel3.GetSample()
+		sample4 := a.channel4.GetSample()
 
-	// Channel 1 panning
-	if a.panning&0x10 != 0 {
-		left += sample1
-	}
-	if a.panning&0x01 != 0 {
-		right += sample1
-	}
+		// Mix channels for left and right outputs
+		var left, right float32
 
-	// Channel 2 panning
-	if a.panning&0x20 != 0 {
-		left += sample2
-	}
-	if a.panning&0x02 != 0 {
-		right += sample2
-	}
+		// Channel 1 panning
+		if a.panning&0x10 != 0 {
+			left += sample1
+		}
+		if a.panning&0x01 != 0 {
+			right += sample1
+		}
 
-	// Channel 3 panning
-	if a.panning&0x40 != 0 {
-		left += sample3
-	}
-	if a.panning&0x04 != 0 {
-		right += sample3
-	}
+		// Channel 2 panning
+		if a.panning&0x20 != 0 {
+			left += sample2
+		}
+		if a.panning&0x02 != 0 {
+			right += sample2
+		}
 
-	// Channel 4 panning
-	if a.panning&0x80 != 0 {
-		left += sample4
+		// Channel 3 panning
+		if a.panning&0x40 != 0 {
+			left += sample3
+		}
+		if a.panning&0x04 != 0 {
+			right += sample3
+		}
+
+		// Channel 4 panning
+		if a.panning&0x80 != 0 {
+			left += sample4
+		}
+		if a.panning&0x08 != 0 {
+			right += sample4
+		}
+
+		// Apply master volume (0-7)
+		left *= float32(a.leftVolume) / 7.0
+		right *= float32(a.rightVolume) / 7.0
+
+		// Normalize (4 channels max)
+		left /= 4.0
+		right /= 4.0
+
+		// Add to output buffer (stereo interleaved)
+		a.sampleBuffer = append(a.sampleBuffer, left, right)
 	}
-	if a.panning&0x08 != 0 {
-		right += sample4
-	}
-
-	// Apply master volume (0-7)
-	left *= float32(a.leftVolume) / 7.0
-	right *= float32(a.rightVolume) / 7.0
-
-	// Normalize (4 channels max)
-	left /= 4.0
-	right /= 4.0
-
-	// Add to output buffer (stereo interleaved)
-	a.sampleBuffer = append(a.sampleBuffer, left, right)
 }
 
 // Read reads an APU register.
@@ -170,6 +183,9 @@ func (a *APU) Read(addr uint16) uint8 {
 		return a.channel1.ReadNR13()
 	case 0xFF14:
 		return a.channel1.ReadNR14()
+
+	case 0xFF15: // NR15 - Unused register
+		return 0xFF // Unused register reads as 0xFF
 
 	// Channel 2 - Pulse
 	case 0xFF16:
@@ -246,6 +262,9 @@ func (a *APU) Write(addr uint16, value uint8) {
 		a.channel1.WriteNR13(value)
 	case 0xFF14:
 		a.channel1.WriteNR14(value)
+
+	case 0xFF15: // NR15 - Unused register
+		// Unused register - writes are ignored
 
 	// Channel 2 - Pulse
 	case 0xFF16:
@@ -372,6 +391,13 @@ func (a *APU) reset() {
 
 // GetSampleBuffer returns the current audio sample buffer and clears it.
 func (a *APU) GetSampleBuffer() []float32 {
+	// Warn if buffer is growing too large (indicates Update() isn't being called regularly)
+	const maxBufferSize = 48000 * 2 // 1 second of stereo samples at 48kHz
+	if len(a.sampleBuffer) > maxBufferSize {
+		// Truncate buffer to prevent unbounded growth
+		a.sampleBuffer = a.sampleBuffer[len(a.sampleBuffer)-maxBufferSize:]
+	}
+
 	samples := a.sampleBuffer
 	a.sampleBuffer = make([]float32, 0, 4096)
 	return samples

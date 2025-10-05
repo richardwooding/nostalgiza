@@ -18,17 +18,29 @@ var dmgPalette = [4]color.RGBA{
 
 // Display implements the Ebiten game interface for the Game Boy emulator.
 type Display struct {
-	emulator *emulator.Emulator
-	screen   *ebiten.Image
-	pixels   []byte // Pre-allocated pixel buffer to avoid GC pressure
+	emulator    *emulator.Emulator
+	screen      *ebiten.Image
+	pixels      []byte // Pre-allocated pixel buffer to avoid GC pressure
+	audioPlayer *AudioPlayer
 }
 
 // NewDisplay creates a new display for the emulator.
 func NewDisplay(emu *emulator.Emulator) *Display {
+	// Create audio player
+	audioPlayer, err := NewAudioPlayer(emu.APU)
+	if err != nil {
+		// Audio is optional - continue without it if initialization fails
+		audioPlayer = nil
+	} else {
+		// Start audio playback
+		audioPlayer.Start()
+	}
+
 	return &Display{
-		emulator: emu,
-		screen:   ebiten.NewImage(ppu.ScreenWidth, ppu.ScreenHeight),
-		pixels:   make([]byte, ppu.ScreenWidth*ppu.ScreenHeight*4), // RGBA format
+		emulator:    emu,
+		screen:      ebiten.NewImage(ppu.ScreenWidth, ppu.ScreenHeight),
+		pixels:      make([]byte, ppu.ScreenWidth*ppu.ScreenHeight*4), // RGBA format
+		audioPlayer: audioPlayer,
 	}
 }
 
@@ -41,6 +53,11 @@ func (d *Display) Update() error {
 	// Game Boy runs at ~59.73 Hz, which is close to 60 Hz
 	// One frame = 70,224 cycles
 	d.emulator.RunCycles(ppu.DotsPerFrame)
+
+	// Update audio player with new samples
+	if d.audioPlayer != nil {
+		d.audioPlayer.Update()
+	}
 
 	return nil
 }

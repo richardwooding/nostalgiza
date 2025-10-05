@@ -99,7 +99,11 @@ func (p *PulseChannel) ClockEnvelope() {
 		return
 	}
 
-	p.envelopeTimer--
+	// Only decrement if timer is not already 0 to prevent underflow
+	if p.envelopeTimer > 0 {
+		p.envelopeTimer--
+	}
+
 	if p.envelopeTimer == 0 {
 		p.envelopeTimer = p.envelopePeriod
 
@@ -117,7 +121,11 @@ func (p *PulseChannel) ClockSweep() {
 		return
 	}
 
-	p.sweepTimer--
+	// Only decrement if timer is not already 0 to prevent underflow
+	if p.sweepTimer > 0 {
+		p.sweepTimer--
+	}
+
 	if p.sweepTimer == 0 { //nolint:nestif // Game Boy sweep logic is inherently complex
 		// Reload timer
 		if p.sweepPeriod > 0 {

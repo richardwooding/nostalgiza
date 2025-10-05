@@ -22,7 +22,6 @@ type NoiseChannel struct {
 
 	// Frequency
 	clockShift  uint8
-	widthMode   uint8
 	divisorCode uint8
 	phaseTimer  uint16
 
@@ -107,7 +106,11 @@ func (n *NoiseChannel) ClockEnvelope() {
 		return
 	}
 
-	n.envelopeTimer--
+	// Only decrement if timer is not already 0 to prevent underflow
+	if n.envelopeTimer > 0 {
+		n.envelopeTimer--
+	}
+
 	if n.envelopeTimer == 0 {
 		n.envelopeTimer = n.envelopePeriod
 
@@ -163,7 +166,6 @@ func (n *NoiseChannel) Reset() {
 	n.lfsr = 0x7FFF
 	n.lfsrWidth = false
 	n.clockShift = 0
-	n.widthMode = 0
 	n.divisorCode = 0
 	n.phaseTimer = 0
 	n.nr41 = 0
