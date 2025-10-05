@@ -66,6 +66,7 @@ func (w *WaveChannel) GetSample() float32 {
 	}
 
 	// Convert to bipolar: 0-15 -> -1.0 to +1.0
+	// Formula: (sample / 7.5) - 1.0 maps: 0→-1.0, 7.5→0.0, 15→+1.0
 	// This centers the waveform around 0 to avoid DC offset
 	return (float32(sample)/7.5 - 1.0)
 }

@@ -401,10 +401,13 @@ func (a *APU) reset() {
 
 // GetSampleBuffer returns the current audio sample buffer and clears it.
 func (a *APU) GetSampleBuffer() []float32 {
-	// Warn if buffer is growing too large (indicates Update() isn't being called regularly)
 	const maxBufferSize = 48000 * 2 // 1 second of stereo samples at 48kHz
+
+	// Check for buffer overflow (indicates Update() isn't being called frequently enough)
 	if len(a.sampleBuffer) > maxBufferSize {
-		// Truncate buffer to prevent unbounded growth
+		// Debug: This indicates audio is being generated faster than consumed
+		// Possible causes: emulation running too fast, audio thread stalled, or buffer sizing issue
+		// Truncate buffer to prevent unbounded memory growth
 		a.sampleBuffer = a.sampleBuffer[len(a.sampleBuffer)-maxBufferSize:]
 	}
 
