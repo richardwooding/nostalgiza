@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/richardwooding/nostalgiza/internal/cartridge"
+	"github.com/richardwooding/nostalgiza/internal/emulator"
 	"github.com/richardwooding/nostalgiza/internal/testrom"
 )
 
@@ -18,6 +20,9 @@ var (
 
 	// ErrTestFailed indicates a test ROM failed.
 	ErrTestFailed = errors.New("test failed")
+
+	// ErrInvalidScale indicates the scale factor is out of valid range.
+	ErrInvalidScale = errors.New("scale must be between 1 and 10")
 )
 
 // CLI represents the command-line interface structure.
@@ -62,12 +67,44 @@ func (c *InfoCmd) Run() error {
 
 // RunCmd runs a Game Boy ROM.
 type RunCmd struct {
-	ROM string `arg:"" type:"existingfile" help:"Path to ROM file."`
+	ROM   string `arg:"" type:"existingfile" help:"Path to ROM file."`
+	Scale int    `help:"Display scale factor (1-10)." default:"3"`
 }
 
 // Run executes the run command.
 func (c *RunCmd) Run() error {
-	return fmt.Errorf("%w: run command requires PPU and input (Phase 3+)", ErrNotImplemented)
+	// Validate scale factor
+	if c.Scale < 1 || c.Scale > 10 {
+		return fmt.Errorf("%w: got %d", ErrInvalidScale, c.Scale)
+	}
+
+	// Read ROM file
+	data, err := os.ReadFile(c.ROM)
+	if err != nil {
+		return fmt.Errorf("failed to read ROM: %w", err)
+	}
+
+	// Create emulator instance
+	emu, err := emulator.New(data)
+	if err != nil {
+		return fmt.Errorf("failed to create emulator: %w", err)
+	}
+
+	// Create display
+	display := NewDisplay(emu)
+
+	// Configure Ebiten window
+	ebiten.SetWindowTitle("NostalgiZA - Game Boy Emulator")
+	ebiten.SetWindowSize(160*c.Scale, 144*c.Scale)
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetTPS(60) // Set to 60 ticks per second (matching Game Boy ~59.73 Hz)
+
+	// Run the emulator
+	if err := ebiten.RunGame(display); err != nil {
+		return fmt.Errorf("emulator error: %w", err)
+	}
+
+	return nil
 }
 
 // TestCmd runs a test ROM and reports results.

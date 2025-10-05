@@ -18,6 +18,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config libx11-dev
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -37,16 +42,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config libx11-dev xvfb
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
       - name: Run tests
-        run: go test -v -race ./...
+        run: xvfb-run -a go test -v -race ./...
 
       - name: Generate coverage
-        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+        run: xvfb-run -a go test -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Display coverage
         run: go tool cover -func=coverage.out
@@ -64,6 +74,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config libx11-dev
 
       - name: Set up Go
         uses: actions/setup-go@v5
