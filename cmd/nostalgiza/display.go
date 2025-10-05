@@ -35,11 +35,38 @@ func NewDisplay(emu *emulator.Emulator) *Display {
 // Update updates the game logic (runs one frame worth of cycles).
 // This is called 60 times per second by Ebiten.
 func (d *Display) Update() error {
+	// Handle keyboard input
+	d.handleInput()
+
 	// Game Boy runs at ~59.73 Hz, which is close to 60 Hz
 	// One frame = 70,224 cycles
 	d.emulator.RunCycles(ppu.DotsPerFrame)
 
 	return nil
+}
+
+// handleInput processes keyboard input and updates joypad state.
+func (d *Display) handleInput() {
+	// Map keyboard keys to Game Boy buttons
+	keyMap := map[ebiten.Key]string{
+		ebiten.KeyArrowUp:    "Up",
+		ebiten.KeyArrowDown:  "Down",
+		ebiten.KeyArrowLeft:  "Left",
+		ebiten.KeyArrowRight: "Right",
+		ebiten.KeyZ:          "A",
+		ebiten.KeyX:          "B",
+		ebiten.KeyEnter:      "Start",
+		ebiten.KeyShift:      "Select",
+	}
+
+	// Check each key and update joypad state
+	for key, button := range keyMap {
+		if ebiten.IsKeyPressed(key) {
+			d.emulator.Joypad.PressButton(button)
+		} else {
+			d.emulator.Joypad.ReleaseButton(button)
+		}
+	}
 }
 
 // Draw draws the game screen.

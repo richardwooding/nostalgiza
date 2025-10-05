@@ -855,6 +855,7 @@ func (c *CPU) execute(opcode uint8) uint8 {
 		return 8
 	case 0xF3: // DI
 		c.IME = false
+		c.pendingIME = false // Cancel any pending EI
 		return 4
 	case 0xF4: // Invalid opcode
 		panic("Invalid opcode 0xF4")
@@ -885,7 +886,8 @@ func (c *CPU) execute(opcode uint8) uint8 {
 		c.Registers.A = c.Memory.Read(c.fetchWord())
 		return 16
 	case 0xFB: // EI
-		c.IME = true
+		// EI enables interrupts AFTER the next instruction executes
+		c.pendingIME = true
 		return 4
 	case 0xFC: // Invalid opcode
 		panic("Invalid opcode 0xFC")

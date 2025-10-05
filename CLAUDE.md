@@ -176,17 +176,27 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
    - ✅ Palette system (BGP, OBP0, OBP1)
    - ✅ Ebiten display integration
 
-#### Planned (Phases 4+)
-4. **Interrupts & Input** (docs/05-interrupts.md, docs/06-input.md)
-   - ✅ V-Blank interrupt
-   - 🚧 STAT interrupts (LYC=LY implemented, others pending)
-   - ⏳ Timer interrupts
-   - ⏳ Serial interrupts
-   - ⏳ Joypad interrupts
-   - ⏳ Joypad input handling
+3.5. **DMA Transfer** ✅ (docs/04-graphics.md)
+   - ✅ DMA transfer implementation (critical for sprite rendering in real games)
+   - ✅ 160 M-cycle transfer from source to OAM
+   - ✅ Memory access restrictions during DMA (HRAM only)
+   - ✅ Cycle-accurate DMA timing
 
+4. **Interrupts & Input** ✅ (docs/05-interrupts.md, docs/06-input.md)
+   - ✅ V-Blank interrupt
+   - ✅ Complete interrupt system (CPU handling, priority, servicing)
+   - ✅ Interrupt Master Enable (IME) with EI/DI/RETI
+   - ✅ EI instruction delayed enable behavior
+   - ✅ HALT instruction with interrupt wake-up
+   - ✅ Joypad interrupts
+   - ✅ Joypad input handling (P1/JOYP register)
+   - ✅ Keyboard input integration (Ebiten: Arrow keys, Z/X, Enter, Shift)
+   - 🚧 STAT interrupts (LYC=LY implemented, H-Blank/V-Blank/OAM pending)
+
+#### Planned (Phases 5+)
 5. **Timers** (docs/07-timers.md)
    - ⏳ DIV and timer registers
+   - ⏳ Timer interrupts
 
 6. **Audio/APU** (docs/08-audio.md)
    - ⏳ Sound channels (can be done last)
