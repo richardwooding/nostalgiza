@@ -4,19 +4,17 @@ package memory
 import (
 	"errors"
 	"fmt"
+
+	"github.com/richardwooding/nostalgiza/internal/cartridge"
 )
 
 // Bus represents the Game Boy memory bus.
 type Bus struct {
-	// ROM banks (16 KiB each)
-	rom0 [0x4000]uint8 // 0000-3FFF: ROM Bank 00 (fixed)
-	rom1 [0x4000]uint8 // 4000-7FFF: ROM Bank 01-NN (switchable)
+	// Cartridge (ROM and external RAM are handled by cartridge)
+	cartridge cartridge.Cartridge
 
 	// VRAM (8 KiB)
 	vram [0x2000]uint8 // 8000-9FFF: Video RAM
-
-	// External RAM (8 KiB)
-	extRAM [0x2000]uint8 // A000-BFFF: External RAM (cartridge)
 
 	// Work RAM (8 KiB)
 	wram [0x2000]uint8 // C000-DFFF: Work RAM
@@ -33,11 +31,6 @@ type Bus struct {
 	// Interrupt Enable Register (1 byte)
 	ie uint8 // FFFF: Interrupt Enable
 
-	// Banking state
-	currentROMBank int
-	currentRAMBank int
-	ramEnabled     bool
-
 	// PPU mode for access restrictions (stub for now)
 	ppuMode uint8
 }
@@ -45,33 +38,35 @@ type Bus struct {
 // NewBus creates a new memory bus.
 func NewBus() *Bus {
 	return &Bus{
-		currentROMBank: 1,
-		currentRAMBank: 0,
-		ramEnabled:     false,
-		ppuMode:        0,
+		ppuMode: 0,
 	}
+}
+
+// SetCartridge sets the cartridge for the memory bus.
+func (b *Bus) SetCartridge(cart cartridge.Cartridge) {
+	b.cartridge = cart
 }
 
 // Read reads a byte from the memory bus.
 func (b *Bus) Read(addr uint16) uint8 {
 	switch {
-	// ROM Bank 00 (0000-3FFF)
-	case addr < 0x4000:
-		return b.rom0[addr]
-
-	// ROM Bank 01-NN (4000-7FFF)
+	// ROM Bank 00 (0000-3FFF) and ROM Bank 01-NN (4000-7FFF)
+	// Handled by cartridge
 	case addr < 0x8000:
-		return b.rom1[addr-0x4000]
+		if b.cartridge != nil {
+			return b.cartridge.Read(addr)
+		}
+		return 0xFF
 
 	// VRAM (8000-9FFF)
 	case addr < 0xA000:
 		// TODO: Check PPU mode for access restrictions (Phase 3)
 		return b.vram[addr-0x8000]
 
-	// External RAM (A000-BFFF)
+	// External RAM (A000-BFFF) - Handled by cartridge
 	case addr < 0xC000:
-		if b.ramEnabled {
-			return b.extRAM[addr-0xA000]
+		if b.cartridge != nil {
+			return b.cartridge.Read(addr)
 		}
 		return 0xFF
 
@@ -117,20 +112,21 @@ func (b *Bus) Read(addr uint16) uint8 {
 func (b *Bus) Write(addr uint16, value uint8) {
 	switch {
 	// ROM Bank 00 & 01 (0000-7FFF) - MBC control
+	// Handled by cartridge
 	case addr < 0x8000:
-		// TODO: Implement MBC banking (Phase 2)
-		// For now, treat as read-only
-		return
+		if b.cartridge != nil {
+			b.cartridge.Write(addr, value)
+		}
 
 	// VRAM (8000-9FFF)
 	case addr < 0xA000:
 		// TODO: Check PPU mode for access restrictions (Phase 3)
 		b.vram[addr-0x8000] = value
 
-	// External RAM (A000-BFFF)
+	// External RAM (A000-BFFF) - Handled by cartridge
 	case addr < 0xC000:
-		if b.ramEnabled {
-			b.extRAM[addr-0xA000] = value
+		if b.cartridge != nil {
+			b.cartridge.Write(addr, value)
 		}
 
 	// Work RAM Bank 0 (C000-CFFF)
@@ -237,26 +233,21 @@ func (b *Bus) writeIO(addr uint16, value uint8) {
 	}
 }
 
-// ErrROMTooSmall indicates the ROM is smaller than the minimum 16 KiB.
-var ErrROMTooSmall = errors.New("ROM too small: minimum is 16 KiB")
+// ErrROMLoadFailed indicates ROM loading failed.
+var ErrROMLoadFailed = errors.New("ROM loading failed")
 
-// LoadROM loads ROM data into memory banks.
-// Minimum ROM size for Game Boy is 32 KiB (two 16 KiB banks).
+// LoadROM loads ROM data by creating a cartridge and attaching it to the bus.
 func (b *Bus) LoadROM(rom []byte) error {
-	if len(rom) < 0x4000 {
-		return fmt.Errorf("%w: got %d bytes", ErrROMTooSmall, len(rom))
+	cart, err := cartridge.New(rom)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrROMLoadFailed, err)
 	}
 
-	// Load ROM Bank 00 (first 16 KiB)
-	copy(b.rom0[:], rom[:0x4000])
-
-	// Load ROM Bank 01 (second 16 KiB if available)
-	if len(rom) >= 0x8000 {
-		copy(b.rom1[:], rom[0x4000:0x8000])
-	} else if len(rom) > 0x4000 {
-		// Partial bank - copy what's available
-		copy(b.rom1[:], rom[0x4000:])
-	}
-
+	b.cartridge = cart
 	return nil
+}
+
+// GetCartridge returns the currently loaded cartridge.
+func (b *Bus) GetCartridge() cartridge.Cartridge {
+	return b.cartridge
 }
