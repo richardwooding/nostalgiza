@@ -64,11 +64,17 @@ func (c *InfoCmd) Run() error {
 
 // RunCmd runs a Game Boy ROM.
 type RunCmd struct {
-	ROM string `arg:"" type:"existingfile" help:"Path to ROM file."`
+	ROM   string `arg:"" type:"existingfile" help:"Path to ROM file."`
+	Scale int    `help:"Display scale factor (1-10)." default:"3"`
 }
 
 // Run executes the run command.
 func (c *RunCmd) Run() error {
+	// Validate scale factor
+	if c.Scale < 1 || c.Scale > 10 {
+		return fmt.Errorf("scale must be between 1 and 10, got %d", c.Scale)
+	}
+
 	// Read ROM file
 	data, err := os.ReadFile(c.ROM)
 	if err != nil {
@@ -86,7 +92,7 @@ func (c *RunCmd) Run() error {
 
 	// Configure Ebiten window
 	ebiten.SetWindowTitle("NostalgiZA - Game Boy Emulator")
-	ebiten.SetWindowSize(160*3, 144*3) // 3x scale for better visibility
+	ebiten.SetWindowSize(160*c.Scale, 144*c.Scale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	// Run the emulator

@@ -46,19 +46,24 @@ func (d *Display) Draw(screen *ebiten.Image) {
 	// Get framebuffer from PPU
 	framebuffer := d.emulator.PPU.GetFramebuffer()
 
-	// Convert framebuffer to RGBA image
-	for y := 0; y < ppu.ScreenHeight; y++ {
-		for x := 0; x < ppu.ScreenWidth; x++ {
-			// Get color index (0-3)
-			colorIndex := framebuffer[y*ppu.ScreenWidth+x]
+	// Convert framebuffer to RGBA image using bulk pixel update
+	// This is much faster than individual Set() calls per pixel
+	pixels := make([]byte, ppu.ScreenWidth*ppu.ScreenHeight*4) // RGBA format
 
-			// Map to DMG palette
-			c := dmgPalette[colorIndex&0x03]
+	for i, colorIndex := range framebuffer {
+		// Map to DMG palette
+		c := dmgPalette[colorIndex&0x03]
 
-			// Set pixel
-			d.screen.Set(x, y, c)
-		}
+		// Write RGBA values
+		offset := i * 4
+		pixels[offset] = c.R
+		pixels[offset+1] = c.G
+		pixels[offset+2] = c.B
+		pixels[offset+3] = c.A
 	}
+
+	// Write all pixels at once (much faster than 23,040 individual Set() calls)
+	d.screen.WritePixels(pixels)
 
 	// Draw the screen to the window
 	screen.DrawImage(d.screen, nil)

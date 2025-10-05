@@ -153,16 +153,8 @@ func (p *PPU) renderSprites() {
 		spriteHeight = 16
 	}
 
-	// Find sprites on this scanline (max 10)
-	type sprite struct {
-		x         int16
-		y         int16
-		tileIndex uint8
-		attrs     uint8
-		oamIndex  int
-	}
-
-	sprites := make([]sprite, 0, 10)
+	// Reset sprite buffer (reuse allocation to reduce GC pressure)
+	p.spriteBuffer = p.spriteBuffer[:0]
 
 	// Scan OAM for sprites on this scanline
 	for i := 0; i < 40; i++ {
@@ -176,7 +168,7 @@ func (p *PPU) renderSprites() {
 		// Check if sprite is on this scanline
 		scanline := int16(p.ly)
 		if scanline >= y && scanline < y+int16(spriteHeight) { //nolint:gosec // Intentional conversion
-			sprites = append(sprites, sprite{
+			p.spriteBuffer = append(p.spriteBuffer, sprite{
 				x:         x,
 				y:         y,
 				tileIndex: tileIndex,
@@ -185,15 +177,15 @@ func (p *PPU) renderSprites() {
 			})
 
 			// Max 10 sprites per scanline
-			if len(sprites) >= 10 {
+			if len(p.spriteBuffer) >= 10 {
 				break
 			}
 		}
 	}
 
 	// Render sprites in reverse order (higher priority last)
-	for i := len(sprites) - 1; i >= 0; i-- {
-		spr := sprites[i]
+	for i := len(p.spriteBuffer) - 1; i >= 0; i-- {
+		spr := p.spriteBuffer[i]
 
 		// Calculate which line of the sprite to render
 		spriteLine := uint16(int16(p.ly) - spr.y) //nolint:gosec // Intentional conversion

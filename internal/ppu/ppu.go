@@ -98,6 +98,15 @@ const (
 	InterruptSTAT = 1
 )
 
+// sprite represents a sprite/object during rendering.
+type sprite struct {
+	x         int16
+	y         int16
+	tileIndex uint8
+	attrs     uint8
+	oamIndex  int
+}
+
 // PPU represents the Game Boy Picture Processing Unit.
 type PPU struct {
 	// Video memory
@@ -124,6 +133,10 @@ type PPU struct {
 	// Framebuffer: 160x144 pixels, 2 bits per pixel (color index 0-3)
 	framebuffer [ScreenWidth * ScreenHeight]uint8
 
+	// Sprite buffer: pre-allocated buffer for sprite rendering (max 10 per scanline)
+	// Reused each scanline to reduce GC pressure
+	spriteBuffer []sprite
+
 	// Interrupt request callback
 	requestInterrupt func(interrupt uint8)
 }
@@ -135,6 +148,7 @@ func New(requestInterrupt func(uint8)) *PPU {
 		mode:             ModeOAMScan,
 		ly:               0,
 		dots:             0,
+		spriteBuffer:     make([]sprite, 0, 10), // Pre-allocate for 10 sprites
 	}
 
 	// Initialize registers to power-up state
