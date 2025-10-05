@@ -20,6 +20,7 @@ var dmgPalette = [4]color.RGBA{
 type Display struct {
 	emulator *emulator.Emulator
 	screen   *ebiten.Image
+	pixels   []byte // Pre-allocated pixel buffer to avoid GC pressure
 }
 
 // NewDisplay creates a new display for the emulator.
@@ -27,6 +28,7 @@ func NewDisplay(emu *emulator.Emulator) *Display {
 	return &Display{
 		emulator: emu,
 		screen:   ebiten.NewImage(ppu.ScreenWidth, ppu.ScreenHeight),
+		pixels:   make([]byte, ppu.ScreenWidth*ppu.ScreenHeight*4), // RGBA format
 	}
 }
 
@@ -48,7 +50,7 @@ func (d *Display) Draw(screen *ebiten.Image) {
 
 	// Convert framebuffer to RGBA image using bulk pixel update
 	// This is much faster than individual Set() calls per pixel
-	pixels := make([]byte, ppu.ScreenWidth*ppu.ScreenHeight*4) // RGBA format
+	// Reuse pre-allocated pixel buffer to avoid GC pressure
 
 	for i, colorIndex := range framebuffer {
 		// Map to DMG palette
@@ -56,14 +58,14 @@ func (d *Display) Draw(screen *ebiten.Image) {
 
 		// Write RGBA values
 		offset := i * 4
-		pixels[offset] = c.R
-		pixels[offset+1] = c.G
-		pixels[offset+2] = c.B
-		pixels[offset+3] = c.A
+		d.pixels[offset] = c.R
+		d.pixels[offset+1] = c.G
+		d.pixels[offset+2] = c.B
+		d.pixels[offset+3] = c.A
 	}
 
 	// Write all pixels at once (much faster than 23,040 individual Set() calls)
-	d.screen.WritePixels(pixels)
+	d.screen.WritePixels(d.pixels)
 
 	// Draw the screen to the window
 	screen.DrawImage(d.screen, nil)
