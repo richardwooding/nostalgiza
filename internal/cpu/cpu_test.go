@@ -848,3 +848,70 @@ func TestHALTNoBug(t *testing.T) {
 		t.Error("V-Blank interrupt flag should be cleared after servicing")
 	}
 }
+
+// TestHALTBugWith2ByteInstruction tests HALT bug behavior with a 2-byte instruction.
+// This verifies that when the bugged byte is a multi-byte instruction opcode,
+// the same byte is used as both the opcode and the first operand byte.
+func TestHALTBugWith2ByteInstruction(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x3E // LD A, n (2-byte instruction)
+	mem.data[0x0102] = 0x42 // The intended operand
+
+	// Setup interrupt: enable V-Blank in IE and IF
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Disable IME (trigger HALT bug)
+	cpu.IME = false
+
+	// Execute HALT instruction
+	cpu.Step()
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// Execute next step - this should exit HALT due to pending interrupt and set haltBug
+	cpu.Step()
+
+	// haltBug flag should now be SET
+	if !cpu.haltBug {
+		t.Fatal("haltBug flag should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// Verify we're still at the instruction after HALT
+	if cpu.Registers.PC != 0x0101 {
+		t.Fatalf("PC = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Execute next step - this will fetch the 2-byte instruction with the bug
+	// The opcode byte (0x3E) is fetched without incrementing PC
+	// Then the operand fetch reads from the same location (0x0101) and increments PC
+	// Result: LD A, $3E instead of LD A, $42
+	cpu.Step()
+
+	// Verify haltBug flag was reset after the fetch
+	if cpu.haltBug {
+		t.Error("haltBug flag should be reset after first fetch")
+	}
+
+	// The instruction that executed was LD A, $3E (not LD A, $42)
+	// because the byte at 0x0101 (0x3E) was used for both opcode and operand
+	if cpu.Registers.A != 0x3E {
+		t.Errorf("A = 0x%02X, want 0x3E (bugged operand, same as opcode byte)", cpu.Registers.A)
+	}
+
+	// PC should now be at 0x0102 (skipped the intended operand at 0x0102)
+	// Wait, let me think about this more carefully:
+	// - First fetch at 0x0101: reads 0x3E (opcode), PC stays at 0x0101 (bug)
+	// - Second fetch for operand at 0x0101: reads 0x3E again, PC increments to 0x0102
+	// So PC should be at 0x0102
+	if cpu.Registers.PC != 0x0102 {
+		t.Errorf("PC = 0x%04X, want 0x0102", cpu.Registers.PC)
+	}
+}

@@ -79,12 +79,16 @@ func (c *CPU) Step() uint8 {
 		if (ie & ifReg & 0x1F) != 0 {
 			c.halted = false
 			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after next fetch
-			// This causes the first byte of the next instruction to be read twice
+			// This causes the first byte of the next instruction to be read twice.
+			// The bugged instruction still executes normally and consumes cycles - this is
+			// hardware-accurate behavior. For 2-byte instructions, the opcode byte is used
+			// as both the opcode and the first operand byte.
 			if !c.IME {
 				c.haltBug = true
 			}
 		}
-		// Consume 1 M-cycle while halted
+		// Consume 1 M-cycle while halted (4 T-cycles)
+		// The next Step() after exiting HALT will fetch and execute the next instruction
 		c.Cycles += 4
 		return 4
 	}
@@ -189,6 +193,9 @@ func (c *CPU) checkInterrupts() uint8 {
 // serviceInterrupt services an interrupt.
 func (c *CPU) serviceInterrupt(bit uint8) {
 	// Exit HALT state if active
+	// Note: This is defensive - normally interrupts are only serviced in Step() which
+	// checks interrupts before the halted state, so halted should already be false.
+	// However, we clear it here for safety in case serviceInterrupt is called directly.
 	c.halted = false
 
 	// Disable interrupts
