@@ -42,6 +42,11 @@ type CPU struct {
 	halted  bool
 	stopped bool
 
+	// HALT bug: when HALT is executed with IME=0 and an interrupt pending,
+	// the PC doesn't increment after the next instruction fetch, causing
+	// the first byte to be read twice
+	haltBug bool
+
 	// Cycle counter
 	Cycles uint64
 }
@@ -73,9 +78,11 @@ func (c *CPU) Step() uint8 {
 		ifReg := c.Memory.Read(0xFF0F)
 		if (ie & ifReg & 0x1F) != 0 {
 			c.halted = false
-			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after HALT
-			// This causes the first byte of the next instruction to execute twice
-			// TODO: Implement HALT bug for hardware accuracy (low priority)
+			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after next fetch
+			// This causes the first byte of the next instruction to be read twice
+			if !c.IME {
+				c.haltBug = true
+			}
 		}
 		// Consume 1 M-cycle while halted
 		c.Cycles += 4
@@ -110,7 +117,17 @@ func (c *CPU) Step() uint8 {
 // fetchByte fetches the next byte from memory and increments PC.
 func (c *CPU) fetchByte() uint8 {
 	value := c.Memory.Read(c.Registers.PC)
-	c.Registers.PC++
+
+	// HALT bug: when haltBug is active, the PC doesn't increment on the first fetch,
+	// causing the byte to be read again. After clearing the flag, we still need to
+	// increment PC normally, otherwise it will be read infinitely.
+	if c.haltBug {
+		c.haltBug = false // Clear the flag - next fetch will increment normally
+		// Don't increment PC on this fetch - it will be read again
+	} else {
+		c.Registers.PC++
+	}
+
 	return value
 }
 
@@ -171,6 +188,9 @@ func (c *CPU) checkInterrupts() uint8 {
 
 // serviceInterrupt services an interrupt.
 func (c *CPU) serviceInterrupt(bit uint8) {
+	// Exit HALT state if active
+	c.halted = false
+
 	// Disable interrupts
 	c.IME = false
 	c.pendingIME = false

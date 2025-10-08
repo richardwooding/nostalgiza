@@ -721,3 +721,130 @@ func TestConditionalReturns(t *testing.T) {
 		})
 	}
 }
+
+// TestHALTBug tests the HALT bug when IME=0 and interrupt pending.
+func TestHALTBug(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	// 0x0100: HALT (0x76)
+	// 0x0101: NOP (0x00)
+	// 0x0102: LD A, $42 (0x3E 0x42)
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP
+	mem.data[0x0102] = 0x3E // LD A, n
+	mem.data[0x0103] = 0x42
+
+	// Setup interrupt: enable V-Blank in IE and IF
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Disable IME (this is the condition for HALT bug)
+	cpu.IME = false
+
+	// Execute HALT instruction
+	cpu.Step()
+
+	// PC should be at 0x0101 after HALT
+	if cpu.Registers.PC != 0x0101 {
+		t.Fatalf("PC after HALT = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// CPU should be halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// Execute next step - this should exit HALT due to pending interrupt and set haltBug
+	cpu.Step()
+
+	// CPU should no longer be halted
+	if cpu.halted {
+		t.Error("CPU should not be halted after interrupt pending")
+	}
+
+	// haltBug flag should now be SET
+	if !cpu.haltBug {
+		t.Error("haltBug flag should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// PC should still be at 0x0101
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC after exiting HALT = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Execute next step - this will fetch NOP with the bug (PC won't increment)
+	cpu.Step()
+
+	// With HALT bug: the NOP at 0x0101 should be fetched but PC not incremented
+	// So PC should still be at 0x0101 after the bugged instruction
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC after HALT bug NOP = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Verify haltBug flag was reset after the fetch
+	if cpu.haltBug {
+		t.Error("haltBug flag should be reset after first fetch")
+	}
+}
+
+// TestHALTNoBug tests that HALT bug does NOT occur when IME=1.
+func TestHALTNoBug(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP
+
+	// Setup interrupt: enable V-Blank in IE, but no pending interrupt yet
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x00 // IF: No interrupts pending
+
+	// Enable IME (no HALT bug in this case)
+	cpu.IME = true
+
+	// Execute HALT instruction at 0x0100
+	// This sets halted=true and PC=0x0101
+	cpu.Step()
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Error("CPU should be halted after HALT instruction")
+	}
+
+	// Now trigger an interrupt while CPU is halted
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Execute next step - checkInterrupts() runs first and services the interrupt
+	// This clears halted flag and jumps to 0x0040
+	cpu.Step()
+
+	// Verify interrupt was serviced correctly:
+	// - CPU is no longer halted
+	// - haltBug flag is NOT set (IME=1)
+	// - PC jumped to interrupt handler (0x0040)
+	// - IME disabled
+	// - IF bit cleared
+
+	if cpu.halted {
+		t.Error("CPU should not be halted after interrupt")
+	}
+
+	if cpu.haltBug {
+		t.Error("haltBug should not be set when IME=1")
+	}
+
+	if cpu.Registers.PC != 0x0040 {
+		t.Errorf("PC = 0x%04X, want 0x0040 (V-Blank handler)", cpu.Registers.PC)
+	}
+
+	if cpu.IME {
+		t.Error("IME should be disabled after servicing interrupt")
+	}
+
+	if mem.data[0xFF0F]&0x01 != 0 {
+		t.Error("V-Blank interrupt flag should be cleared after servicing")
+	}
+}
