@@ -212,10 +212,10 @@ LFSR width:
 
 ### Linear Feedback Shift Register (LFSR)
 Generates pseudo-random bit pattern:
-1. XOR bits 0 and 1
-2. Shift register right
-3. Place XOR result in bit 14 (and bit 6 if 7-bit mode)
-4. Output bit 0
+1. XNOR bits 0 and 1 (inverted XOR: identical bits → 1, different bits → 0)
+2. Place XNOR result in bit 15 (and bit 7 if 7-bit mode)
+3. Shift register right (XNOR result ends in bit 14, or bit 6 in 7-bit mode)
+4. Output inverted bit 0
 
 ## APU Timing
 
