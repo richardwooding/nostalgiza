@@ -15,7 +15,7 @@ import (
 
 // Stress Tests - Test edge cases and rapid state changes
 
-func TestTimerStress_RapidTACChanges(_ *testing.T) {
+func TestTimerStress_RapidTACChanges(t *testing.T) {
 	timer := New(nil)
 	timer.Write(TIMA, 0x00)
 	timer.Write(DIV, 0x00) // Reset divCounter via public API
@@ -33,7 +33,14 @@ func TestTimerStress_RapidTACChanges(_ *testing.T) {
 	}
 
 	// Test passes if no crash/panic occurs during rapid TAC changes
-	// No assertions needed - we're just verifying stability
+	// Minimal assertions to verify timer remains operational
+	if timer.Read(TIMA) == 0 {
+		t.Error("TIMA should have incremented during rapid TAC changes")
+	}
+	// DIV should have advanced (100 iterations * 50 cycles = 5000 cycles = 19 DIV increments)
+	if timer.Read(DIV) < 19 {
+		t.Errorf("DIV = %d, expected at least 19 after 5000 cycles", timer.Read(DIV))
+	}
 }
 
 func TestTimerStress_FrequentDIVResets(t *testing.T) {
@@ -229,8 +236,9 @@ func TestTimerBoundary_LargeUpdateCycles(t *testing.T) {
 	timer.Update(65535)
 
 	// Should not crash or produce incorrect behavior
-	// TIMA should have incremented (65535 / 16 = 4095 times)
-	// Starting from 0, after 4095 increments: 4095 % 256 = 255
+	// TIMA should have incremented 4095 times (65535 / 16)
+	// This causes 15 overflows (reloading from TMA=0) plus 255 additional increments
+	// Result: (4095 % 256) = 255
 	expectedTIMA := uint8(4095 % 256)
 	if timer.Read(TIMA) != expectedTIMA {
 		t.Errorf("TIMA after large update = %d, want %d", timer.Read(TIMA), expectedTIMA)

@@ -90,6 +90,9 @@ func BenchmarkTimer_OverflowHandling(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		// Reset state each iteration for isolated overflow testing
+		// This is intentional - not representative of real-world patterns but
+		// allows us to benchmark pure overflow handling performance
 		timer.Write(DIV, 0x00)               // Reset divCounter first
 		timer.Write(TIMA, 0xFF)              // Set TIMA to overflow value
 		timer.Update(benchmarkOverflowCycle) // Trigger overflow
