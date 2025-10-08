@@ -114,13 +114,65 @@ func (t *Timer) Update(cycles uint16) {
 	}
 
 	// When timer is enabled, we need to detect all falling edges
-	// Process cycle by cycle to catch all edges
-	for i := uint16(0); i < cycles; i++ {
-		oldDiv := t.divCounter
-		t.divCounter++
+	// Calculate falling edges mathematically instead of iterating
+	startCounter := t.divCounter
+	endCounter := t.divCounter + cycles
 
-		t.checkFallingEdge(oldDiv, t.divCounter)
+	// Count falling edges on the timer bit between start and end
+	fallingEdges := t.countFallingEdges(startCounter, endCounter)
+
+	// Update divCounter
+	t.divCounter = endCounter
+
+	// Increment TIMA for each falling edge
+	for i := uint16(0); i < fallingEdges; i++ {
+		t.incrementTIMA()
 	}
+}
+
+// countFallingEdges counts the number of falling edges (1->0 transitions)
+// on the timer bit as the counter increments from startCounter to endCounter.
+func (t *Timer) countFallingEdges(startCounter, endCounter uint16) uint16 {
+	if startCounter >= endCounter {
+		return 0
+	}
+
+	// Get the bit position for the current clock select
+	var bitPosition uint
+	switch t.clockSelect {
+	case 0: // 4096 Hz
+		bitPosition = 9
+	case 1: // 262144 Hz
+		bitPosition = 3
+	case 2: // 65536 Hz
+		bitPosition = 5
+	case 3: // 16384 Hz
+		bitPosition = 7
+	}
+
+	// A falling edge occurs when the specified bit transitions from 1 to 0.
+	// For bit N, the pattern repeats every 2^(N+1) cycles:
+	// - Cycles [0, 2^N): bit = 0
+	// - Cycles [2^N, 2^(N+1)): bit = 1
+	// - At cycle 2^(N+1): bit = 0 again (falling edge)
+	//
+	// So falling edges occur at multiples of 2^(N+1).
+
+	period := uint16(1 << (bitPosition + 1))
+
+	// Find the first falling edge >= startCounter + 1 (since we increment from startCounter)
+	// Falling edges are at 0, period, 2*period, 3*period, ...
+	// We need the first multiple of period that is > startCounter
+
+	firstEdge := ((startCounter / period) + 1) * period
+
+	// Count how many multiples of period are in the range (startCounter, endCounter]
+	if firstEdge > endCounter {
+		return 0
+	}
+
+	// Count edges: firstEdge, firstEdge+period, firstEdge+2*period, ..., up to endCounter
+	return (endCounter-firstEdge)/period + 1
 }
 
 // checkFallingEdge checks if a falling edge occurred on the selected timer bit.
