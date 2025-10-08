@@ -45,3 +45,8 @@ go.work.sum
 testdata/**/*.gb
 testdata/**/*.gbc
 !testdata/test.gb
+
+# Test ROM sources and txt files
+testdata/**/source/
+testdata/**/*.txt
+!testdata/**/README.md
