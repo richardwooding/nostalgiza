@@ -35,7 +35,7 @@ func TestBlarggCPUInstrs(t *testing.T) {
 		skipReason string
 	}{
 		{"01-special", "cpu_instrs/individual/01-special.gb", false, ""},
-		{"02-interrupts", "cpu_instrs/individual/02-interrupts.gb", true, "requires interrupt support (Phase 4)"},
+		{"02-interrupts", "cpu_instrs/individual/02-interrupts.gb", false, ""},
 		{"03-op sp,hl", "cpu_instrs/individual/03-op sp,hl.gb", false, ""},
 		{"04-op r,imm", "cpu_instrs/individual/04-op r,imm.gb", false, ""},
 		{"05-op rp", "cpu_instrs/individual/05-op rp.gb", false, ""},
