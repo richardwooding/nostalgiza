@@ -83,9 +83,9 @@ func BenchmarkTimer_OverflowHandling(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Write(TIMA, 0xFF)
-		timer.Write(DIV, 0x00) // Reset divCounter via public API
-		timer.Update(16)       // Trigger overflow
+		timer.Write(DIV, 0x00)  // Reset divCounter first
+		timer.Write(TIMA, 0xFF) // Set TIMA to overflow value
+		timer.Update(16)        // Trigger overflow
 	}
 }
 

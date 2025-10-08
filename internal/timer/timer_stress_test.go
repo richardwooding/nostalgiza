@@ -32,13 +32,10 @@ func TestTimerStress_RapidTACChanges(t *testing.T) {
 		timer.Update(50)
 	}
 
-	// Timer should still be functioning (no crashes/panics)
-	// Note: TIMA increment is non-deterministic in this test due to rapid
-	// frequency changes. The test verifies robustness, not specific behavior.
-	// The primary goal is ensuring no crashes/panics occur.
-	if timer.Read(TIMA) == 0 {
-		t.Log("TIMA did not increment during rapid TAC changes (non-deterministic, but timer is stable)")
-	}
+	// Test passes if no crash/panic occurs during rapid TAC changes.
+	// TIMA increment is non-deterministic due to rapid frequency changes,
+	// so we only verify the timer remains stable.
+	_ = t // Test validates through execution without panic
 }
 
 func TestTimerStress_FrequentDIVResets(t *testing.T) {
@@ -78,8 +75,6 @@ func TestTimerStress_ConcurrentTimerAndDIV(t *testing.T) {
 	timer.Write(TAC, 0x05) // 262144 Hz
 	timer.Write(TIMA, 0x00)
 
-	initialDIV := timer.Read(DIV)
-
 	// Run for many cycles, occasionally resetting DIV
 	for i := 0; i < 50; i++ {
 		timer.Update(256) // Increment DIV once
@@ -95,9 +90,14 @@ func TestTimerStress_ConcurrentTimerAndDIV(t *testing.T) {
 	}
 
 	// DIV should be functioning
+	// After 50 iterations of 256 cycles with resets every 5 iterations (10 total):
+	// Each reset happens after iteration multiples of 5 (0, 5, 10, 15, 20, 25, 30, 35, 40, 45)
+	// Between resets: 5 iterations * 256 cycles = 1,280 cycles = 5 DIV increments
+	// After last reset (iteration 45), we have 4 more iterations = 1,024 cycles = 4 DIV increments
+	// So DIV should be exactly 4 at the end
 	currentDIV := timer.Read(DIV)
-	if currentDIV == initialDIV && initialDIV != 0 {
-		t.Error("DIV did not change during test")
+	if currentDIV != 4 {
+		t.Errorf("DIV = %d, expected 4 after test sequence", currentDIV)
 	}
 }
 
@@ -170,9 +170,11 @@ func TestTimerBoundary_MultipleTimaOverflows(t *testing.T) {
 	// First overflow at 2 increments (FE->FF->00)
 	// Then need 256 increments for each subsequent overflow
 	overflowsExpected := 5
+	// Note: cycles = (2 + 256*4) * 16 = 16,416 which fits in uint16 (max 65,535)
+	// If overflowsExpected is increased beyond 6, cycles may exceed uint16 max
 	cycles := (2 + (256 * (overflowsExpected - 1))) * 16
 
-	timer.Update(uint16(cycles)) //nolint:gosec // Safe: cycles is bounded by test logic
+	timer.Update(uint16(cycles)) //nolint:gosec // Safe: cycles=16,416 for overflowsExpected=5
 
 	if interruptCount != overflowsExpected {
 		t.Errorf("Interrupt count = %d, want %d", interruptCount, overflowsExpected)
