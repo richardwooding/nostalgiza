@@ -85,8 +85,8 @@ func BenchmarkTimer_OverflowHandling(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		timer.Write(TIMA, 0xFF)
-		timer.divCounter = 0
-		timer.Update(16) // Trigger overflow
+		timer.Write(DIV, 0x00) // Reset divCounter via public API
+		timer.Update(16)       // Trigger overflow
 	}
 }
 
@@ -99,6 +99,6 @@ func BenchmarkTimer_MixedOperations(b *testing.B) {
 		timer.Update(50)
 		_ = timer.Read(DIV)
 		_ = timer.Read(TIMA)
-		timer.Write(TIMA, uint8(i%256))
+		timer.Write(TIMA, uint8(i%256)) //nolint:gosec // Safe: i%256 is bounded 0-255
 	}
 }

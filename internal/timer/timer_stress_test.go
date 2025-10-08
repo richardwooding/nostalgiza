@@ -9,10 +9,10 @@ import (
 func TestTimerStress_RapidTACChanges(t *testing.T) {
 	timer := New(nil)
 	timer.Write(TIMA, 0x00)
+	timer.Write(DIV, 0x00) // Reset divCounter via public API
 
 	// Rapidly change timer frequency
 	frequencies := []uint8{0x04, 0x05, 0x06, 0x07}
-	timer.divCounter = 0
 
 	for i := 0; i < 100; i++ {
 		// Change frequency
@@ -119,19 +119,19 @@ func TestTimerStress_EnableDisableCycles(t *testing.T) {
 func TestTimerBoundary_DivCounterOverflow(t *testing.T) {
 	timer := New(nil)
 
-	// Set divCounter to near uint16 max
-	timer.divCounter = 65535
-
-	// Update by 1 - should wrap to 0
-	timer.Update(1)
-
-	if timer.divCounter != 0 {
-		t.Errorf("divCounter after overflow = %d, want 0", timer.divCounter)
+	// Increment DIV to near uint16 max by running many cycles
+	// DIV = 255 means divCounter = 65280 (255 * 256)
+	// We need to get close to 65535
+	timer.Update(65280) // Gets divCounter to 65280
+	if timer.Read(DIV) != 255 {
+		t.Fatalf("DIV before overflow test = %d, want 255", timer.Read(DIV))
 	}
 
-	// DIV (upper 8 bits) should also wrap correctly
-	// At 65535, DIV = 255
-	// After +1, divCounter = 0, DIV = 0
+	// Update by 256 more cycles - should overflow divCounter
+	// 65280 + 256 = 65536, which overflows to 0
+	timer.Update(256)
+
+	// DIV should wrap to 0
 	if timer.Read(DIV) != 0 {
 		t.Errorf("DIV after divCounter overflow = %d, want 0", timer.Read(DIV))
 	}
@@ -148,11 +148,10 @@ func TestTimerBoundary_MultipleTimaOverflows(t *testing.T) {
 	timer := New(func() { interruptCount++ })
 
 	// Enable timer at highest frequency
-	timer.Write(TAC, 0x05) // 262144 Hz (every 16 cycles)
-	timer.Write(TMA, 0x00) // Reload with 0
+	timer.Write(TAC, 0x05)  // 262144 Hz (every 16 cycles)
+	timer.Write(TMA, 0x00)  // Reload with 0
 	timer.Write(TIMA, 0xFE) // Start near overflow
-
-	timer.divCounter = 0
+	timer.Write(DIV, 0x00)  // Reset divCounter via public API
 
 	// Trigger multiple consecutive overflows
 	// TIMA: 0xFE -> 0xFF -> 0x00 (overflow, reload to 0) -> 0x01 -> ... -> 0xFF -> 0x00 (overflow)
@@ -163,7 +162,7 @@ func TestTimerBoundary_MultipleTimaOverflows(t *testing.T) {
 	overflowsExpected := 5
 	cycles := (2 + (256 * (overflowsExpected - 1))) * 16
 
-	timer.Update(uint16(cycles))
+	timer.Update(uint16(cycles)) //nolint:gosec // Safe: cycles is bounded by test logic
 
 	if interruptCount != overflowsExpected {
 		t.Errorf("Interrupt count = %d, want %d", interruptCount, overflowsExpected)
@@ -180,8 +179,9 @@ func TestTimerBoundary_TIMAAllValues(t *testing.T) {
 
 	// Test writing all possible TIMA values
 	for i := 0; i <= 255; i++ {
-		timer.Write(TIMA, uint8(i))
-		if timer.Read(TIMA) != uint8(i) {
+		val := uint8(i) //nolint:gosec // Safe: i is bounded 0-255
+		timer.Write(TIMA, val)
+		if timer.Read(TIMA) != val {
 			t.Errorf("TIMA write/read failed for value %d", i)
 		}
 	}
@@ -192,8 +192,9 @@ func TestTimerBoundary_TMAAllValues(t *testing.T) {
 
 	// Test writing all possible TMA values
 	for i := 0; i <= 255; i++ {
-		timer.Write(TMA, uint8(i))
-		if timer.Read(TMA) != uint8(i) {
+		val := uint8(i) //nolint:gosec // Safe: i is bounded 0-255
+		timer.Write(TMA, val)
+		if timer.Read(TMA) != val {
 			t.Errorf("TMA write/read failed for value %d", i)
 		}
 	}
@@ -205,8 +206,7 @@ func TestTimerBoundary_LargeUpdateCycles(t *testing.T) {
 	// Test updating with large cycle counts
 	timer.Write(TAC, 0x05) // 262144 Hz
 	timer.Write(TIMA, 0x00)
-
-	timer.divCounter = 0
+	timer.Write(DIV, 0x00) // Reset divCounter via public API
 
 	// Update with max uint16 cycles
 	timer.Update(65535)
