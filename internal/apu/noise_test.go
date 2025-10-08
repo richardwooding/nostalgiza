@@ -7,24 +7,31 @@ import (
 func TestNoiseChannel_LFSR(t *testing.T) {
 	n := NewNoiseChannel()
 
-	// Verify initial LFSR state
-	if n.lfsr != 0x7FFF {
-		t.Errorf("Initial LFSR: got 0x%04X, want 0x7FFF", n.lfsr)
+	// Verify initial LFSR state (should be 0 per Pan Docs)
+	if n.lfsr != 0 {
+		t.Errorf("Initial LFSR: got 0x%04X, want 0x0000", n.lfsr)
 	}
 
-	// Clock LFSR and verify it changes
+	// Set LFSR to a known value for testing (not all 1s to avoid lockup)
+	n.lfsr = 0x1234
 	initialLFSR := n.lfsr
+
+	// Clock LFSR and verify it changes
 	n.clockLFSR()
 
 	if n.lfsr == initialLFSR {
 		t.Error("LFSR should change after clocking")
 	}
 
-	// Verify bit 14 is set based on XOR of bits 0 and 1
-	xorResult := (initialLFSR & 0x01) ^ ((initialLFSR >> 1) & 0x01)
+	// Verify the LFSR was shifted right after XNOR placement
+	// The algorithm is: XNOR bits 0&1, place in bit 15, then shift right
+	// So the XNOR result should end up in bit 14 after the shift
+	bit0 := initialLFSR & 0x01
+	bit1 := (initialLFSR >> 1) & 0x01
+	xnorResult := ^(bit0 ^ bit1) & 0x01
 	expectedBit14 := (n.lfsr >> 14) & 0x01
-	if expectedBit14 != xorResult {
-		t.Errorf("Bit 14: got %d, want %d", expectedBit14, xorResult)
+	if expectedBit14 != xnorResult {
+		t.Errorf("Bit 14 (after shift): got %d, want %d", expectedBit14, xnorResult)
 	}
 }
 
@@ -41,19 +48,17 @@ func TestNoiseChannel_LFSRWidth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n := NewNoiseChannel()
 			n.lfsrWidth = tt.width7bit
-			n.lfsr = 0x7FFF
+			n.lfsr = 0x1234 // Use a value that won't lock up
 
+			initialLFSR := n.lfsr
 			// Clock multiple times and check behavior
 			for i := 0; i < 100; i++ {
 				n.clockLFSR()
 			}
 
-			if tt.width7bit {
-				// In 7-bit mode, upper bits should match bit 6 pattern
-				// This is a simplified check - just verify LFSR is still changing
-				if n.lfsr == 0x7FFF {
-					t.Error("LFSR should have changed in 7-bit mode")
-				}
+			// LFSR should have changed (unless it locked up, but 0x1234 shouldn't)
+			if n.lfsr == initialLFSR {
+				t.Errorf("LFSR should have changed in %s", tt.name)
 			}
 		})
 	}
@@ -166,8 +171,8 @@ func TestNoiseChannel_Trigger(t *testing.T) {
 		t.Error("Channel should be enabled after trigger")
 	}
 
-	if n.lfsr != 0x7FFF {
-		t.Error("LFSR should be reset to 0x7FFF after trigger")
+	if n.lfsr != 0 {
+		t.Errorf("LFSR should be reset to 0 after trigger, got 0x%04X", n.lfsr)
 	}
 
 	if n.phaseTimer != 0 {
@@ -185,24 +190,24 @@ func TestNoiseChannel_GetSample(t *testing.T) {
 	// Get sample - should be based on inverted bit 0 of LFSR
 	sample := n.GetSample()
 
-	// LFSR starts at 0x7FFF (bit 0 = 1), inverted = 0
-	// Bipolar: 0 * 2.0 - 1.0 = -1.0
-	if sample != -1.0 {
-		t.Errorf("Initial sample: got %f, want -1.0", sample)
+	// LFSR starts at 0 (bit 0 = 0), inverted = 1
+	// Bipolar: 1 * 2.0 - 1.0 = 1.0
+	if sample != 1.0 {
+		t.Errorf("Initial sample: got %f, want 1.0", sample)
 	}
 
-	// Clock LFSR until we get bit 0 = 0 (inverted = 1)
+	// Clock LFSR until we get bit 0 = 1 (inverted = 0)
 	for i := 0; i < 1000; i++ {
 		n.clockLFSR()
-		if (n.lfsr & 0x01) == 0 {
+		if (n.lfsr & 0x01) == 1 {
 			break
 		}
 	}
 
 	sample = n.GetSample()
-	expected := float32(15) / 15.0 // Max volume
+	expected := float32(-15) / 15.0 // Max volume, inverted
 	if sample != expected {
-		t.Errorf("Sample with bit 0 = 0: got %f, want %f", sample, expected)
+		t.Errorf("Sample with bit 0 = 1: got %f, want %f", sample, expected)
 	}
 }
 
@@ -217,6 +222,8 @@ func TestNoiseChannel_Update(t *testing.T) {
 	initialLFSR := n.lfsr
 
 	// Update with enough cycles to trigger LFSR clock
+	// Need to run multiple times since LFSR starts at 0
+	n.Update(8)
 	n.Update(8)
 
 	if n.lfsr == initialLFSR {
@@ -243,8 +250,8 @@ func TestNoiseChannel_Reset(t *testing.T) {
 	if n.dacEnabled {
 		t.Error("DAC should be disabled after reset")
 	}
-	if n.lfsr != 0x7FFF {
-		t.Errorf("LFSR should be 0x7FFF after reset, got 0x%04X", n.lfsr)
+	if n.lfsr != 0 {
+		t.Errorf("LFSR should be 0 after reset, got 0x%04X", n.lfsr)
 	}
 	if n.lengthCounter != 0 {
 		t.Error("Length counter should be 0 after reset")

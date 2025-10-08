@@ -35,7 +35,7 @@ var noiseDivisors = [8]uint16{8, 16, 32, 48, 64, 80, 96, 112}
 // NewNoiseChannel creates a new noise channel.
 func NewNoiseChannel() *NoiseChannel {
 	return &NoiseChannel{
-		lfsr: 0x7FFF, // Initialize to all 1s
+		lfsr: 0, // Initialize to 0
 	}
 }
 
@@ -56,20 +56,23 @@ func (n *NoiseChannel) Update(cycles uint16) {
 
 // clockLFSR advances the Linear Feedback Shift Register.
 func (n *NoiseChannel) clockLFSR() {
-	// XOR bits 0 and 1
-	xorResult := (n.lfsr & 0x01) ^ ((n.lfsr >> 1) & 0x01)
+	// XNOR bits 0 and 1 (if identical -> 1, if different -> 0)
+	bit0 := n.lfsr & 0x01
+	bit1 := (n.lfsr >> 1) & 0x01
+	xnorResult := ^(bit0 ^ bit1) & 0x01
+
+	// Place XNOR result in bit 15
+	n.lfsr &= 0x7FFF // Clear bit 15
+	n.lfsr |= xnorResult << 15
+
+	// If 7-bit mode, also place in bit 7
+	if n.lfsrWidth {
+		n.lfsr &= ^uint16(0x80) // Clear bit 7
+		n.lfsr |= xnorResult << 7
+	}
 
 	// Shift right
 	n.lfsr >>= 1
-
-	// Place XOR result in bit 14
-	n.lfsr |= xorResult << 14
-
-	// If 7-bit mode, also place in bit 6
-	if n.lfsrWidth {
-		n.lfsr &= ^uint16(0x40) // Clear bit 6
-		n.lfsr |= xorResult << 6
-	}
 }
 
 // GetSample returns the current sample output (-1.0 to +1.0).
@@ -140,7 +143,7 @@ func (n *NoiseChannel) trigger() {
 	n.envelopeVolume = n.envelopeInitial
 
 	// Reset LFSR
-	n.lfsr = 0x7FFF
+	n.lfsr = 0
 
 	// Channel is disabled if DAC is off
 	if !n.dacEnabled {
@@ -164,7 +167,7 @@ func (n *NoiseChannel) Reset() {
 	n.envelopeIncrease = false
 	n.envelopePeriod = 0
 	n.envelopeTimer = 0
-	n.lfsr = 0x7FFF
+	n.lfsr = 0
 	n.lfsrWidth = false
 	n.clockShift = 0
 	n.divisorCode = 0
