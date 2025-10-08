@@ -408,6 +408,16 @@ func (c *CPU) execute(opcode uint8) uint8 {
 		c.Memory.Write(c.Registers.HL(), c.Registers.L)
 		return 8
 	case 0x76: // HALT
+		// HALT is special: on hardware it fetches with IR = [PC] (no increment)
+		// but we've already incremented PC in fetchByte(), so undo it
+		// This ensures PC points to the HALT instruction when halted=true
+		//
+		// EXCEPTION: If haltBug is active, PC has already been positioned correctly
+		// by the previous HALT exit logic, so don't decrement again.
+		// This prevents infinite loops when the byte after HALT is another HALT.
+		if !c.haltBug {
+			c.Registers.PC--
+		}
 		c.halted = true
 		return 4
 	case 0x77: // LD (HL), A

@@ -78,23 +78,42 @@ func (c *CPU) Step() uint8 {
 		ifReg := c.Memory.Read(0xFF0F)
 		if (ie & ifReg & 0x1F) != 0 {
 			c.halted = false
+
+			// PC is currently at the HALT instruction (HALT decremented it)
+			// Move PC forward to point to the instruction after HALT
+			c.Registers.PC++
+
 			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after next fetch
-			// This causes the first byte of the next instruction to be read twice.
-			// The bugged instruction still executes normally and consumes cycles - this is
-			// hardware-accurate behavior. For 2-byte instructions, the opcode byte is used
-			// as both the opcode and the first operand byte.
+			// This causes the byte AFTER HALT to be read twice.
+			//
+			// At this point, PC points to the byte after HALT.
+			// The next Step() will:
+			//   1. fetchByte() reads the byte after HALT, PC doesn't increment (haltBug=true)
+			//   2. Execute that instruction
+			//   3. Next fetchByte() reads the same byte again, PC increments normally
+			//   4. Execute the same instruction again (or use as operand if 2-byte)
+			//
+			// For 2-byte instructions, the opcode byte is used as both opcode and operand.
 			if !c.IME {
 				c.haltBug = true
 			}
 		}
 		// Consume 1 M-cycle while halted (4 T-cycles)
-		// The next Step() after exiting HALT will fetch and execute the next instruction
 		c.Cycles += 4
 		return 4
 	}
 
 	// Fetch instruction
 	opcode := c.fetchByte()
+
+	// Clear haltBug flag after opcode fetch but before executing
+	// This ensures:
+	// 1. The flag is still set during the opcode fetch (preventing PC increment)
+	// 2. The flag is clear for operand fetches in multi-byte instructions
+	// 3. The flag is clear when executing HALT again (preventing double PC decrement)
+	if c.haltBug {
+		c.haltBug = false
+	}
 
 	// Decode and execute
 	var cycles uint8
@@ -123,12 +142,10 @@ func (c *CPU) fetchByte() uint8 {
 	value := c.Memory.Read(c.Registers.PC)
 
 	// HALT bug: when haltBug is active, the PC doesn't increment on the first fetch,
-	// causing the byte to be read again. After clearing the flag, we still need to
-	// increment PC normally, otherwise it will be read infinitely.
-	if c.haltBug {
-		c.haltBug = false // Clear the flag - next fetch will increment normally
-		// Don't increment PC on this fetch - it will be read again
-	} else {
+	// causing the byte to be read again.
+	// Note: We don't clear the flag here - it's cleared after instruction execution
+	// in Step(). This prevents double PC decrements when the bugged byte is another HALT.
+	if !c.haltBug {
 		c.Registers.PC++
 	}
 

@@ -746,9 +746,9 @@ func TestHALTBug(t *testing.T) {
 	// Execute HALT instruction
 	cpu.Step()
 
-	// PC should be at 0x0101 after HALT
-	if cpu.Registers.PC != 0x0101 {
-		t.Fatalf("PC after HALT = 0x%04X, want 0x0101", cpu.Registers.PC)
+	// PC should be at 0x0100 after HALT (HALT decrements PC to match hardware IR=[PC] behavior)
+	if cpu.Registers.PC != 0x0100 {
+		t.Fatalf("PC after HALT = 0x%04X, want 0x0100", cpu.Registers.PC)
 	}
 
 	// CPU should be halted
@@ -913,5 +913,74 @@ func TestHALTBugWith2ByteInstruction(t *testing.T) {
 	// So PC should be at 0x0102
 	if cpu.Registers.PC != 0x0102 {
 		t.Errorf("PC = 0x%04X, want 0x0102", cpu.Registers.PC)
+	}
+}
+
+// TestHALTBugPCPosition verifies that PC is correctly positioned at the HALT
+// instruction after HALT executes. This is critical for the HALT bug to work correctly.
+func TestHALTBugPCPosition(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place HALT at a known address
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP (instruction after HALT)
+
+	// Execute HALT instruction
+	cycles := cpu.Step()
+
+	// Verify HALT executed (4 cycles)
+	if cycles != 4 {
+		t.Fatalf("HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// CRITICAL: Verify PC is positioned AT the HALT instruction, not after it
+	// This is because HALT fetches with IR = [PC] (no increment) on real hardware
+	// Our implementation decrements PC after fetchByte() to match this behavior
+	if cpu.Registers.PC != 0x0100 {
+		t.Errorf("PC = 0x%04X, want 0x0100 (AT HALT instruction)", cpu.Registers.PC)
+		t.Error("HALT should decrement PC to undo fetchByte() increment")
+		t.Error("This ensures PC points to HALT when halted=true, matching hardware")
+	}
+
+	// Setup interrupt to trigger HALT bug
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+	cpu.IME = false         // Disable interrupts to trigger bug
+
+	// Execute next step - should exit HALT and set haltBug flag
+	// This also moves PC forward to 0x0101 (the instruction after HALT)
+	cpu.Step()
+
+	// Verify HALT bug flag is set
+	if !cpu.haltBug {
+		t.Error("haltBug should be set when exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// PC should now be at 0x0101 (instruction after HALT)
+	// The halted check incremented PC to point to the next instruction
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after exiting HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - this should fetch the NOP at 0x0101 WITHOUT incrementing PC
+	cpu.Step()
+
+	// Verify haltBug flag was cleared
+	if cpu.haltBug {
+		t.Error("haltBug should be cleared after fetch")
+	}
+
+	// PC should still be at 0x0101 because:
+	// - fetchByte() read from 0x0101 (the NOP)
+	// - haltBug was true, so PC didn't increment
+	// - PC remains at 0x0101
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after bugged fetch (no increment)", cpu.Registers.PC)
 	}
 }
