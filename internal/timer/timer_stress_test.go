@@ -4,6 +4,15 @@ import (
 	"testing"
 )
 
+// This file contains stress tests and boundary tests for the timer implementation.
+//
+// Stress tests verify the timer's robustness under rapid state changes and
+// concurrent operations, ensuring it handles edge cases that may occur in
+// real Game Boy software.
+//
+// Boundary tests verify correct behavior at numeric limits and overflow
+// conditions, ensuring the timer handles wrapping and edge values correctly.
+
 // Stress Tests - Test edge cases and rapid state changes
 
 func TestTimerStress_RapidTACChanges(t *testing.T) {
@@ -24,10 +33,11 @@ func TestTimerStress_RapidTACChanges(t *testing.T) {
 	}
 
 	// Timer should still be functioning (no crashes/panics)
-	// TIMA should have incremented at some point
+	// Note: TIMA increment is non-deterministic in this test due to rapid
+	// frequency changes. The test verifies robustness, not specific behavior.
+	// The primary goal is ensuring no crashes/panics occur.
 	if timer.Read(TIMA) == 0 {
-		// This might fail if frequencies don't align, but timer should still work
-		t.Log("TIMA did not increment during rapid TAC changes (may be expected)")
+		t.Log("TIMA did not increment during rapid TAC changes (non-deterministic, but timer is stable)")
 	}
 }
 

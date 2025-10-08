@@ -77,9 +77,8 @@ func BenchmarkTimer_ReadWrite(b *testing.B) {
 }
 
 func BenchmarkTimer_OverflowHandling(b *testing.B) {
-	interruptCount := 0
-	timer := New(func() { interruptCount++ })
-	timer.Write(TAC, 0x05) // 262144 Hz
+	timer := New(func() {}) // Interrupt callback required but not used in benchmark
+	timer.Write(TAC, 0x05)  // 262144 Hz
 	timer.Write(TMA, 0x00)
 
 	b.ResetTimer()
