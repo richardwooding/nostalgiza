@@ -163,16 +163,20 @@ func (t *Timer) countFallingEdges(startCounter, endCounter uint16) uint16 {
 	// Find the first falling edge >= startCounter + 1 (since we increment from startCounter)
 	// Falling edges are at 0, period, 2*period, 3*period, ...
 	// We need the first multiple of period that is > startCounter
+	//
+	// Use 32-bit arithmetic to prevent overflow when period is small and startCounter is large.
+	// Example: startCounter=65520, period=16 would cause overflow in uint16 arithmetic.
 
-	firstEdge := ((startCounter / period) + 1) * period
+	firstEdge := (uint32(startCounter)/uint32(period) + 1) * uint32(period)
 
 	// Count how many multiples of period are in the range (startCounter, endCounter]
-	if firstEdge > endCounter {
+	if firstEdge > uint32(endCounter) {
 		return 0
 	}
 
 	// Count edges: firstEdge, firstEdge+period, firstEdge+2*period, ..., up to endCounter
-	return (endCounter-firstEdge)/period + 1
+	//nolint:gosec // G115: Safe conversion - result is always <= period which fits in uint16
+	return uint16((uint32(endCounter)-firstEdge)/uint32(period) + 1)
 }
 
 // checkFallingEdge checks if a falling edge occurred on the selected timer bit.

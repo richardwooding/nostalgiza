@@ -413,10 +413,14 @@ func (c *CPU) execute(opcode uint8) uint8 {
 		// This ensures PC points to the HALT instruction when halted=true
 		//
 		// EXCEPTION: If haltBug is active, PC has already been positioned correctly
-		// by the previous HALT exit logic, so don't decrement again.
-		// This prevents infinite loops when the byte after HALT is another HALT.
+		// because fetchByte() didn't increment (haltBug prevented it).
+		// In this case, don't decrement - PC is already at the correct position.
+		// This prevents double PC decrement when HALT follows HALT.
 		if !c.haltBug {
 			c.Registers.PC--
+		} else {
+			// Clear the haltBug flag now that we've handled it
+			c.haltBug = false
 		}
 		c.halted = true
 		return 4

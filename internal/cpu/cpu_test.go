@@ -984,3 +984,78 @@ func TestHALTBugPCPosition(t *testing.T) {
 		t.Errorf("PC = 0x%04X, want 0x0101 after bugged fetch (no increment)", cpu.Registers.PC)
 	}
 }
+
+// TestHALTBugRepeatedHALT verifies that when the byte after HALT is another HALT,
+// the implementation doesn't enter an infinite loop or double-decrement PC.
+// This tests the edge case mentioned in docs/10-halt-bug.md.
+func TestHALTBugRepeatedHALT(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Two HALT instructions in sequence
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x76 // HALT again
+	mem.data[0x0102] = 0x00 // NOP
+
+	// Setup interrupt to trigger HALT bug
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+	cpu.IME = false         // Disable interrupts to trigger bug
+
+	// Execute first HALT
+	cycles := cpu.Step()
+	if cycles != 4 {
+		t.Fatalf("First HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted and PC is at HALT instruction
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after first HALT")
+	}
+	if cpu.Registers.PC != 0x0100 {
+		t.Errorf("PC = 0x%04X, want 0x0100 after first HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - should exit HALT due to interrupt pending
+	// This will set haltBug flag and increment PC to 0x0101
+	cpu.Step()
+
+	// Verify haltBug flag is set and PC moved forward
+	if !cpu.haltBug {
+		t.Error("haltBug should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after exiting first HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - this fetches the second HALT at 0x0101 WITHOUT incrementing PC
+	// The HALT instruction should execute, but it should NOT decrement PC again
+	// because haltBug flag is true (preventing double decrement)
+	cycles = cpu.Step()
+
+	// Verify second HALT executed (4 cycles)
+	if cycles != 4 {
+		t.Fatalf("Second HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted again
+	if !cpu.halted {
+		t.Error("CPU should be halted after second HALT")
+	}
+
+	// CRITICAL: PC should be at 0x0101 (the second HALT), NOT 0x0100
+	// The haltBug flag should have prevented PC decrement in the second HALT handler
+	// This prevents infinite loops where PC keeps decrementing
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after second HALT (no double decrement)", cpu.Registers.PC)
+		t.Error("The haltBug flag should prevent PC decrement when executing bugged HALT")
+	}
+
+	// Execute one more step to verify we can exit the second HALT normally
+	cpu.Step()
+
+	// PC should now be at 0x0102 after exiting second HALT
+	if cpu.Registers.PC != 0x0102 {
+		t.Errorf("PC = 0x%04X, want 0x0102 after exiting second HALT", cpu.Registers.PC)
+	}
+}

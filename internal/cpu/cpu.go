@@ -107,11 +107,14 @@ func (c *CPU) Step() uint8 {
 	opcode := c.fetchByte()
 
 	// Clear haltBug flag after opcode fetch but before executing
-	// This ensures:
+	// EXCEPTION: Don't clear if the opcode is HALT (0x76), because the HALT handler
+	// needs to know that PC wasn't incremented during fetch.
+	// This prevents double PC decrement when HALT follows HALT.
+	//
+	// For other instructions:
 	// 1. The flag is still set during the opcode fetch (preventing PC increment)
 	// 2. The flag is clear for operand fetches in multi-byte instructions
-	// 3. The flag is clear when executing HALT again (preventing double PC decrement)
-	if c.haltBug {
+	if c.haltBug && opcode != 0x76 {
 		c.haltBug = false
 	}
 
