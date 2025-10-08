@@ -4,6 +4,13 @@ import (
 	"testing"
 )
 
+// Benchmark constants.
+const (
+	benchmarkCycles        = 100 // Typical update size for real-world usage
+	benchmarkDIVCycles     = 256 // One DIV increment period
+	benchmarkOverflowCycle = 16  // Cycles to trigger overflow at 262144 Hz
+)
+
 // Benchmark tests to measure timer performance
 
 func BenchmarkTimer_Disabled(b *testing.B) {
@@ -12,7 +19,7 @@ func BenchmarkTimer_Disabled(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Update(100)
+		timer.Update(benchmarkCycles)
 	}
 }
 
@@ -23,7 +30,7 @@ func BenchmarkTimer_HighFrequency(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Update(100)
+		timer.Update(benchmarkCycles)
 	}
 }
 
@@ -34,7 +41,7 @@ func BenchmarkTimer_LowFrequency(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Update(100)
+		timer.Update(benchmarkCycles)
 	}
 }
 
@@ -43,7 +50,7 @@ func BenchmarkTimer_DIVIncrement(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Update(256) // One DIV increment
+		timer.Update(benchmarkDIVCycles)
 	}
 }
 
@@ -83,9 +90,9 @@ func BenchmarkTimer_OverflowHandling(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.Write(DIV, 0x00)  // Reset divCounter first
-		timer.Write(TIMA, 0xFF) // Set TIMA to overflow value
-		timer.Update(16)        // Trigger overflow
+		timer.Write(DIV, 0x00)               // Reset divCounter first
+		timer.Write(TIMA, 0xFF)              // Set TIMA to overflow value
+		timer.Update(benchmarkOverflowCycle) // Trigger overflow
 	}
 }
 

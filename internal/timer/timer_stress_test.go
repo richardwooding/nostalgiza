@@ -15,7 +15,7 @@ import (
 
 // Stress Tests - Test edge cases and rapid state changes
 
-func TestTimerStress_RapidTACChanges(t *testing.T) {
+func TestTimerStress_RapidTACChanges(_ *testing.T) {
 	timer := New(nil)
 	timer.Write(TIMA, 0x00)
 	timer.Write(DIV, 0x00) // Reset divCounter via public API
@@ -32,10 +32,8 @@ func TestTimerStress_RapidTACChanges(t *testing.T) {
 		timer.Update(50)
 	}
 
-	// Test passes if no crash/panic occurs during rapid TAC changes.
-	// TIMA increment is non-deterministic due to rapid frequency changes,
-	// so we only verify the timer remains stable.
-	_ = t // Test validates through execution without panic
+	// Test passes if no crash/panic occurs during rapid TAC changes
+	// No assertions needed - we're just verifying stability
 }
 
 func TestTimerStress_FrequentDIVResets(t *testing.T) {
@@ -62,9 +60,16 @@ func TestTimerStress_FrequentDIVResets(t *testing.T) {
 		t.Errorf("DIV = %d, want 0", timer.Read(DIV))
 	}
 
-	// Some interrupts should have fired
+	// Verify interrupts fired
+	// With 100 iterations of (8 cycles + DIV reset + 8 cycles):
+	// Each iteration advances timer by 16 cycles at 262144 Hz (falling edge every 16 cycles)
+	// Expected: at least 1 increment per iteration, with TIMA starting at 0xFE
+	// After 2 increments: 0xFE->0xFF->0x00 (overflow), then continues from 0xFE (TMA value)
+	// Minimum interrupts: 100/4 = 25 (conservative estimate accounting for resets)
 	if interruptCount == 0 {
 		t.Error("No timer interrupts fired during stress test")
+	} else if interruptCount < 20 {
+		t.Errorf("Only %d interrupts fired, expected at least 20", interruptCount)
 	}
 }
 
