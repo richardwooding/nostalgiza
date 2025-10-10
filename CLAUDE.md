@@ -183,12 +183,13 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
    - ✅ Memory access restrictions during DMA (HRAM only)
    - ✅ Cycle-accurate DMA timing
 
-4. **Interrupts & Input** ✅ (docs/05-interrupts.md, docs/06-input.md)
+4. **Interrupts & Input** ✅ (docs/05-interrupts.md, docs/06-input.md, docs/10-halt-bug.md)
    - ✅ V-Blank interrupt
    - ✅ Complete interrupt system (CPU handling, priority, servicing)
    - ✅ Interrupt Master Enable (IME) with EI/DI/RETI
    - ✅ EI instruction delayed enable behavior
    - ✅ HALT instruction with interrupt wake-up
+   - ✅ HALT bug (IME=0, interrupt pending - PC fails to increment)
    - ✅ Joypad interrupts
    - ✅ Joypad input handling (P1/JOYP register)
    - ✅ Keyboard input integration (Ebiten: Arrow keys, Z/X, Enter, Shift)
@@ -223,3 +224,12 @@ Comprehensive Game Boy hardware documentation is in the `docs/` folder. Always r
 - Use test ROMs (Blargg's test suite, Mooneye-GB)
 - Start with simple games like Tetris
 - Test each component in isolation before integration
+
+#### Known Test ROM Issues
+- **Blargg halt_bug.gb**: Times out with no output (issue #38)
+  - HALT bug implementation is correct per documentation
+  - All 6 HALT unit tests pass
+  - Other Blargg tests pass (02-interrupts.gb, etc.)
+  - Timeout likely due to undocumented hardware quirk or ROM-specific requirements
+  - Investigation documented in issue #38 comment 3390728440
+  - Recommended: defer until more emulator features mature

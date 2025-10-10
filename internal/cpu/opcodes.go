@@ -410,17 +410,10 @@ func (c *CPU) execute(opcode uint8) uint8 {
 	case 0x76: // HALT
 		// HALT is special: on hardware it fetches with IR = [PC] (no increment)
 		// but we've already incremented PC in fetchByte(), so undo it
-		// This ensures PC points to the HALT instruction when halted=true
-		//
-		// EXCEPTION: If haltBug is active, PC has already been positioned correctly
-		// because fetchByte() didn't increment (haltBug prevented it).
-		// In this case, don't decrement - PC is already at the correct position.
-		// This prevents double PC decrement when HALT follows HALT.
-		if !c.haltBug {
+		// However, if wasHaltBug is true, fetchByte() already didn't increment PC,
+		// so we shouldn't decrement it (prevents double decrement in repeated HALT scenario)
+		if !c.wasHaltBug {
 			c.Registers.PC--
-		} else {
-			// Clear the haltBug flag now that we've handled it
-			c.haltBug = false
 		}
 		c.halted = true
 		return 4

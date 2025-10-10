@@ -106,14 +106,6 @@ func (t *Timer) Write(addr uint16, value uint8) {
 }
 
 // Update advances the timer by the given number of CPU cycles.
-//
-// The cycles parameter represents CPU clock cycles (T-cycles) to advance.
-// Note: divCounter is uint16 and will naturally wrap around at 65536, which is
-// correct behavior for the Game Boy timer system. The DIV register (upper 8 bits
-// of divCounter) increments at 16384 Hz and wraps every ~4 seconds.
-//
-// Edge detection works correctly across uint16 wraparound because we only care
-// about the bit transitions within the current update window.
 func (t *Timer) Update(cycles uint16) {
 	if !t.enabled {
 		// Timer disabled, only update DIV
@@ -122,96 +114,13 @@ func (t *Timer) Update(cycles uint16) {
 	}
 
 	// When timer is enabled, we need to detect all falling edges
-	// Calculate falling edges mathematically instead of iterating
-	startCounter := t.divCounter
-	endCounter := t.divCounter + cycles // uint16 overflow is intentional and correct
+	// Process cycle by cycle to catch all edges
+	for i := uint16(0); i < cycles; i++ {
+		oldDiv := t.divCounter
+		t.divCounter++
 
-	// Count falling edges on the timer bit between start and end
-	fallingEdges := t.countFallingEdges(startCounter, endCounter)
-
-	// Update divCounter
-	t.divCounter = endCounter
-
-	// Increment TIMA for each falling edge
-	for i := uint16(0); i < fallingEdges; i++ {
-		t.incrementTIMA()
+		t.checkFallingEdge(oldDiv, t.divCounter)
 	}
-}
-
-// countFallingEdges counts the number of falling edges (1->0 transitions)
-// on the timer bit as the counter increments from startCounter to endCounter.
-//
-// This function handles uint16 wraparound correctly. When endCounter < startCounter
-// (due to overflow), we split the calculation into two ranges:
-// [startCounter, 0xFFFF] and [0, endCounter].
-func (t *Timer) countFallingEdges(startCounter, endCounter uint16) uint16 {
-	// Handle uint16 wraparound: split into two ranges
-	if startCounter > endCounter {
-		// Calculate edges from startCounter to 0xFFFF
-		edgesBeforeWrap := t.countFallingEdgesRange(startCounter, 0xFFFF)
-		// Calculate edges from 0 to endCounter
-		edgesAfterWrap := t.countFallingEdgesRange(0, endCounter)
-		return edgesBeforeWrap + edgesAfterWrap
-	}
-
-	// No wraparound: use single range calculation
-	return t.countFallingEdgesRange(startCounter, endCounter)
-}
-
-// countFallingEdgesRange counts falling edges in a single range (no wraparound).
-func (t *Timer) countFallingEdgesRange(startCounter, endCounter uint16) uint16 {
-	if startCounter >= endCounter {
-		return 0
-	}
-
-	// Get the bit position for the current clock select
-	var bitPosition uint
-	switch t.clockSelect {
-	case 0: // 4096 Hz
-		bitPosition = 9
-	case 1: // 262144 Hz
-		bitPosition = 3
-	case 2: // 65536 Hz
-		bitPosition = 5
-	case 3: // 16384 Hz
-		bitPosition = 7
-	}
-
-	// A falling edge occurs when the specified bit transitions from 1 to 0.
-	// For bit N, the pattern repeats every 2^(N+1) cycles:
-	// - Cycles [0, 2^N): bit = 0
-	// - Cycles [2^N, 2^(N+1)): bit = 1
-	// - At cycle 2^(N+1): bit = 0 again (falling edge)
-	//
-	// So falling edges occur at multiples of 2^(N+1).
-
-	period := uint16(1 << (bitPosition + 1))
-
-	// Find the first falling edge >= startCounter + 1 (since we increment from startCounter)
-	// Falling edges are at 0, period, 2*period, 3*period, ...
-	// We need the first multiple of period that is > startCounter
-	//
-	// Use 32-bit arithmetic to prevent overflow when period is small and startCounter is large.
-	// Example: startCounter=65520, period=16 would cause overflow in uint16 arithmetic.
-
-	firstEdge := (uint32(startCounter)/uint32(period) + 1) * uint32(period)
-
-	// Count how many multiples of period are in the range (startCounter, endCounter]
-	if firstEdge > uint32(endCounter) {
-		return 0
-	}
-
-	// Count edges: firstEdge, firstEdge+period, firstEdge+2*period, ..., up to endCounter
-	// The maximum result occurs when startCounter=0, endCounter=65535, period=16 (smallest period)
-	// Maximum edges = (65535 - 0) / 16 + 1 = 4096 + 1 = 4097, which fits in uint16 (max 65535)
-	// However, we add defensive bounds checking to ensure safety.
-	edges := (uint32(endCounter)-firstEdge)/uint32(period) + 1
-	if edges > 0xFFFF {
-		// This should never happen given the constraints above, but we guard against it
-		return 0xFFFF
-	}
-	//nolint:gosec // G115: Safe conversion - bounds checked above
-	return uint16(edges)
 }
 
 // checkFallingEdge checks if a falling edge occurred on the selected timer bit.
