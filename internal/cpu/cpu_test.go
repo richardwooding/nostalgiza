@@ -721,3 +721,341 @@ func TestConditionalReturns(t *testing.T) {
 		})
 	}
 }
+
+// TestHALTBug tests the HALT bug when IME=0 and interrupt pending.
+func TestHALTBug(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	// 0x0100: HALT (0x76)
+	// 0x0101: NOP (0x00)
+	// 0x0102: LD A, $42 (0x3E 0x42)
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP
+	mem.data[0x0102] = 0x3E // LD A, n
+	mem.data[0x0103] = 0x42
+
+	// Setup interrupt: enable V-Blank in IE and IF
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Disable IME (this is the condition for HALT bug)
+	cpu.IME = false
+
+	// Execute HALT instruction
+	cpu.Step()
+
+	// PC should be at 0x0100 after HALT (HALT decrements PC to match hardware IR=[PC] behavior)
+	if cpu.Registers.PC != 0x0100 {
+		t.Fatalf("PC after HALT = 0x%04X, want 0x0100", cpu.Registers.PC)
+	}
+
+	// CPU should be halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// Execute next step - this should exit HALT due to pending interrupt and set haltBug
+	cpu.Step()
+
+	// CPU should no longer be halted
+	if cpu.halted {
+		t.Error("CPU should not be halted after interrupt pending")
+	}
+
+	// haltBug flag should now be SET
+	if !cpu.haltBug {
+		t.Error("haltBug flag should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// PC should still be at 0x0101
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC after exiting HALT = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Execute next step - this will fetch NOP with the bug (PC won't increment)
+	cpu.Step()
+
+	// With HALT bug: the NOP at 0x0101 should be fetched but PC not incremented
+	// So PC should still be at 0x0101 after the bugged instruction
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC after HALT bug NOP = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Verify haltBug flag was reset after the fetch
+	if cpu.haltBug {
+		t.Error("haltBug flag should be reset after first fetch")
+	}
+}
+
+// TestHALTNoBug tests that HALT bug does NOT occur when IME=1.
+func TestHALTNoBug(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP
+
+	// Setup interrupt: enable V-Blank in IE, but no pending interrupt yet
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x00 // IF: No interrupts pending
+
+	// Enable IME (no HALT bug in this case)
+	cpu.IME = true
+
+	// Execute HALT instruction at 0x0100
+	// This sets halted=true and PC=0x0101
+	cpu.Step()
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Error("CPU should be halted after HALT instruction")
+	}
+
+	// Now trigger an interrupt while CPU is halted
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Execute next step - checkInterrupts() runs first and services the interrupt
+	// This clears halted flag and jumps to 0x0040
+	cpu.Step()
+
+	// Verify interrupt was serviced correctly:
+	// - CPU is no longer halted
+	// - haltBug flag is NOT set (IME=1)
+	// - PC jumped to interrupt handler (0x0040)
+	// - IME disabled
+	// - IF bit cleared
+
+	if cpu.halted {
+		t.Error("CPU should not be halted after interrupt")
+	}
+
+	if cpu.haltBug {
+		t.Error("haltBug should not be set when IME=1")
+	}
+
+	if cpu.Registers.PC != 0x0040 {
+		t.Errorf("PC = 0x%04X, want 0x0040 (V-Blank handler)", cpu.Registers.PC)
+	}
+
+	if cpu.IME {
+		t.Error("IME should be disabled after servicing interrupt")
+	}
+
+	if mem.data[0xFF0F]&0x01 != 0 {
+		t.Error("V-Blank interrupt flag should be cleared after servicing")
+	}
+}
+
+// TestHALTBugWith2ByteInstruction tests HALT bug behavior with a 2-byte instruction.
+// This verifies that when the bugged byte is a multi-byte instruction opcode,
+// the same byte is used as both the opcode and the first operand byte.
+func TestHALTBugWith2ByteInstruction(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place instructions at PC
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x3E // LD A, n (2-byte instruction)
+	mem.data[0x0102] = 0x42 // The intended operand
+
+	// Setup interrupt: enable V-Blank in IE and IF
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+
+	// Disable IME (trigger HALT bug)
+	cpu.IME = false
+
+	// Execute HALT instruction
+	cpu.Step()
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// Execute next step - this should exit HALT due to pending interrupt and set haltBug
+	cpu.Step()
+
+	// haltBug flag should now be SET
+	if !cpu.haltBug {
+		t.Fatal("haltBug flag should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// Verify we're still at the instruction after HALT
+	if cpu.Registers.PC != 0x0101 {
+		t.Fatalf("PC = 0x%04X, want 0x0101", cpu.Registers.PC)
+	}
+
+	// Execute next step - this will fetch the 2-byte instruction with the bug
+	// The opcode byte (0x3E) is fetched without incrementing PC
+	// Then the operand fetch reads from the same location (0x0101) and increments PC
+	// Result: LD A, $3E instead of LD A, $42
+	cpu.Step()
+
+	// Verify haltBug flag was reset after the fetch
+	if cpu.haltBug {
+		t.Error("haltBug flag should be reset after first fetch")
+	}
+
+	// The instruction that executed was LD A, $3E (not LD A, $42)
+	// because the byte at 0x0101 (0x3E) was used for both opcode and operand
+	if cpu.Registers.A != 0x3E {
+		t.Errorf("A = 0x%02X, want 0x3E (bugged operand, same as opcode byte)", cpu.Registers.A)
+	}
+
+	// PC should now be at 0x0102 (skipped the intended operand at 0x0102)
+	// Wait, let me think about this more carefully:
+	// - First fetch at 0x0101: reads 0x3E (opcode), PC stays at 0x0101 (bug)
+	// - Second fetch for operand at 0x0101: reads 0x3E again, PC increments to 0x0102
+	// So PC should be at 0x0102
+	if cpu.Registers.PC != 0x0102 {
+		t.Errorf("PC = 0x%04X, want 0x0102", cpu.Registers.PC)
+	}
+}
+
+// TestHALTBugPCPosition verifies that PC is correctly positioned at the HALT
+// instruction after HALT executes. This is critical for the HALT bug to work correctly.
+func TestHALTBugPCPosition(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Place HALT at a known address
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x00 // NOP (instruction after HALT)
+
+	// Execute HALT instruction
+	cycles := cpu.Step()
+
+	// Verify HALT executed (4 cycles)
+	if cycles != 4 {
+		t.Fatalf("HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after HALT instruction")
+	}
+
+	// CRITICAL: Verify PC is positioned AT the HALT instruction, not after it
+	// This is because HALT fetches with IR = [PC] (no increment) on real hardware
+	// Our implementation decrements PC after fetchByte() to match this behavior
+	if cpu.Registers.PC != 0x0100 {
+		t.Errorf("PC = 0x%04X, want 0x0100 (AT HALT instruction)", cpu.Registers.PC)
+		t.Error("HALT should decrement PC to undo fetchByte() increment")
+		t.Error("This ensures PC points to HALT when halted=true, matching hardware")
+	}
+
+	// Setup interrupt to trigger HALT bug
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+	cpu.IME = false         // Disable interrupts to trigger bug
+
+	// Execute next step - should exit HALT and set haltBug flag
+	// This also moves PC forward to 0x0101 (the instruction after HALT)
+	cpu.Step()
+
+	// Verify HALT bug flag is set
+	if !cpu.haltBug {
+		t.Error("haltBug should be set when exiting HALT with IME=0 and interrupt pending")
+	}
+
+	// PC should now be at 0x0101 (instruction after HALT)
+	// The halted check incremented PC to point to the next instruction
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after exiting HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - this should fetch the NOP at 0x0101 WITHOUT incrementing PC
+	cpu.Step()
+
+	// Verify haltBug flag was cleared
+	if cpu.haltBug {
+		t.Error("haltBug should be cleared after fetch")
+	}
+
+	// PC should still be at 0x0101 because:
+	// - fetchByte() read from 0x0101 (the NOP)
+	// - haltBug was true, so PC didn't increment
+	// - PC remains at 0x0101
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after bugged fetch (no increment)", cpu.Registers.PC)
+	}
+}
+
+// TestHALTBugRepeatedHALT verifies that when the byte after HALT is another HALT,
+// the implementation doesn't enter an infinite loop or double-decrement PC.
+// This tests the edge case mentioned in docs/10-halt-bug.md.
+func TestHALTBugRepeatedHALT(t *testing.T) {
+	cpu, mem := setupCPU()
+
+	// Setup: Two HALT instructions in sequence
+	cpu.Registers.PC = 0x0100
+	mem.data[0x0100] = 0x76 // HALT
+	mem.data[0x0101] = 0x76 // HALT again
+	mem.data[0x0102] = 0x00 // NOP
+
+	// Setup interrupt to trigger HALT bug
+	mem.data[0xFFFF] = 0x01 // IE: V-Blank enabled
+	mem.data[0xFF0F] = 0x01 // IF: V-Blank pending
+	cpu.IME = false         // Disable interrupts to trigger bug
+
+	// Execute first HALT
+	cycles := cpu.Step()
+	if cycles != 4 {
+		t.Fatalf("First HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted and PC is at HALT instruction
+	if !cpu.halted {
+		t.Fatal("CPU should be halted after first HALT")
+	}
+	if cpu.Registers.PC != 0x0100 {
+		t.Errorf("PC = 0x%04X, want 0x0100 after first HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - should exit HALT due to interrupt pending
+	// This will set haltBug flag and increment PC to 0x0101
+	cpu.Step()
+
+	// Verify haltBug flag is set and PC moved forward
+	if !cpu.haltBug {
+		t.Error("haltBug should be set after exiting HALT with IME=0 and interrupt pending")
+	}
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after exiting first HALT", cpu.Registers.PC)
+	}
+
+	// Execute next step - this fetches the second HALT at 0x0101 WITHOUT incrementing PC
+	// The HALT instruction should execute, but it should NOT decrement PC again
+	// because haltBug flag is true (preventing double decrement)
+	cycles = cpu.Step()
+
+	// Verify second HALT executed (4 cycles)
+	if cycles != 4 {
+		t.Fatalf("Second HALT should take 4 cycles, got %d", cycles)
+	}
+
+	// Verify CPU is halted again
+	if !cpu.halted {
+		t.Error("CPU should be halted after second HALT")
+	}
+
+	// CRITICAL: PC should be at 0x0101 (the second HALT), NOT 0x0100
+	// The haltBug flag should have prevented PC decrement in the second HALT handler
+	// This prevents infinite loops where PC keeps decrementing
+	if cpu.Registers.PC != 0x0101 {
+		t.Errorf("PC = 0x%04X, want 0x0101 after second HALT (no double decrement)", cpu.Registers.PC)
+		t.Error("The haltBug flag should prevent PC decrement when executing bugged HALT")
+	}
+
+	// Execute one more step to verify we can exit the second HALT normally
+	cpu.Step()
+
+	// PC should now be at 0x0102 after exiting second HALT
+	if cpu.Registers.PC != 0x0102 {
+		t.Errorf("PC = 0x%04X, want 0x0102 after exiting second HALT", cpu.Registers.PC)
+	}
+}

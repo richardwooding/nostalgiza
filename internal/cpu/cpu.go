@@ -42,6 +42,11 @@ type CPU struct {
 	halted  bool
 	stopped bool
 
+	// HALT bug: when HALT is executed with IME=0 and an interrupt pending,
+	// the PC doesn't increment after the next instruction fetch, causing
+	// the first byte to be read twice
+	haltBug bool
+
 	// Cycle counter
 	Cycles uint64
 }
@@ -73,17 +78,45 @@ func (c *CPU) Step() uint8 {
 		ifReg := c.Memory.Read(0xFF0F)
 		if (ie & ifReg & 0x1F) != 0 {
 			c.halted = false
-			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after HALT
-			// This causes the first byte of the next instruction to execute twice
-			// TODO: Implement HALT bug for hardware accuracy (low priority)
+
+			// PC is currently at the HALT instruction (HALT decremented it)
+			// Move PC forward to point to the instruction after HALT
+			c.Registers.PC++
+
+			// HALT bug: if IME=0 and interrupt pending, PC doesn't increment after next fetch
+			// This causes the byte AFTER HALT to be read twice.
+			//
+			// At this point, PC points to the byte after HALT.
+			// The next Step() will:
+			//   1. fetchByte() reads the byte after HALT, PC doesn't increment (haltBug=true)
+			//   2. Execute that instruction
+			//   3. Next fetchByte() reads the same byte again, PC increments normally
+			//   4. Execute the same instruction again (or use as operand if 2-byte)
+			//
+			// For 2-byte instructions, the opcode byte is used as both opcode and operand.
+			if !c.IME {
+				c.haltBug = true
+			}
 		}
-		// Consume 1 M-cycle while halted
+		// Consume 1 M-cycle while halted (4 T-cycles)
 		c.Cycles += 4
 		return 4
 	}
 
 	// Fetch instruction
 	opcode := c.fetchByte()
+
+	// Clear haltBug flag after opcode fetch but before executing
+	// EXCEPTION: Don't clear if the opcode is HALT (0x76), because the HALT handler
+	// needs to know that PC wasn't incremented during fetch.
+	// This prevents double PC decrement when HALT follows HALT.
+	//
+	// For other instructions:
+	// 1. The flag is still set during the opcode fetch (preventing PC increment)
+	// 2. The flag is clear for operand fetches in multi-byte instructions
+	if c.haltBug && opcode != 0x76 {
+		c.haltBug = false
+	}
 
 	// Decode and execute
 	var cycles uint8
@@ -110,7 +143,15 @@ func (c *CPU) Step() uint8 {
 // fetchByte fetches the next byte from memory and increments PC.
 func (c *CPU) fetchByte() uint8 {
 	value := c.Memory.Read(c.Registers.PC)
-	c.Registers.PC++
+
+	// HALT bug: when haltBug is active, the PC doesn't increment on the first fetch,
+	// causing the byte to be read again.
+	// Note: We don't clear the flag here - it's cleared after instruction execution
+	// in Step(). This prevents double PC decrements when the bugged byte is another HALT.
+	if !c.haltBug {
+		c.Registers.PC++
+	}
+
 	return value
 }
 
@@ -171,6 +212,12 @@ func (c *CPU) checkInterrupts() uint8 {
 
 // serviceInterrupt services an interrupt.
 func (c *CPU) serviceInterrupt(bit uint8) {
+	// Exit HALT state if active
+	// Note: This is defensive - normally interrupts are only serviced in Step() which
+	// checks interrupts before the halted state, so halted should already be false.
+	// However, we clear it here for safety in case serviceInterrupt is called directly.
+	c.halted = false
+
 	// Disable interrupts
 	c.IME = false
 	c.pendingIME = false
